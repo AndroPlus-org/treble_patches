@@ -1,0 +1,1399 @@
+From 67f209d7aa16931b1e34584b49c6683245d9eff7 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sun, 4 Nov 2018 10:57:22 +0900
+Subject: [PATCH 1/1] [PATCH] Squashed commit to add support for notch hiding
+
+[PATCH] Only use simple rects for cutout region
+
+Otherwise there is a big performance hit in all kinds of
+situations where we do operations with the region, specifically
+when:
+
+- updating input windows
+- insetting the cutout during layout
+- touch dispatch
+
+Test: DisplayCutoutTest, WmDisplayCutoutTest
+Bug: 110464019
+Bug: 110452325
+Change-Id: I94a25c3794ecd33b8b7204ca308ac91623498f13
+
+Cutout: Add developer setting to mask the display cutout
+
+Adds an option to mask the cutout by effectively shrinking the logical display
+such that developers can test apps as if the device did not have a notch.
+
+Bug: 112876936
+Test: Go to Settings > Developer Options > Simulate display with cutout > "No cutout". Cutout should be hidden. Rotate screen, take screenshots, screenrecord, screen off animation should all work as expected.
+Change-Id: I5cdb201734d238bf3785ab55843114e4b5b4ee41
+(cherry picked from commit 8c28c7c2d91fde8bac708e15bb12e53d0693e5c9)
+
+Cutout emulation: string changes
+
+Bug: 112876936
+Test: Open developer options, go to "display cutout", verify strings.
+Change-Id: I1d22f56ca7fa8c817da2407f36613e4fc132a3a9
+(cherry picked from commit 843f6f78819e29cb4cb61c55614569211f0439b7)
+
+DO NOT MERGE Kill most processes when display size changes
+
+This isn't something apps generally can handle, so we kill all of
+them for now.
+
+Test: Change cutout overlay that changes display size
+Test: Rotate screen
+Bug: 112876936
+Change-Id: Ic3b0f1b3ae1e9bd93ac8f2c6952aa093878602b8
+(cherry picked from commit 2bd9a25007fcec5612944af7db0d1aa4d9849351)
+
+ScreenDecorations: Update corner radius when configuration changes
+
+Bug: 112876936
+Test: atest ScreenDecorationsTest
+Change-Id: I4359b3da4a47dcf434f018fe3e62e18354d1be47
+(cherry picked from commit 58fa67cebda06e8297a776f6ee97bffbe322d80b)
+
+DO NOT MERGE Fix display freezing when screen size mismatches
+
+If we have a display size change, make sure to set different
+scaling mode such that we can show the buffer even if there is
+a size mismatch.
+
+Test: Rotate screen
+Test: Change cutout type
+Bug: 112876936
+Change-Id: Iedc7774d69730a95b98ba46d4f274bc3b7e66bd1
+(cherry picked from commit da4997312c79bfb5b5c6fb31833fc2ce401c4457)
+
+DO NOT MERGE Do not kill processes when screen size changes
+
+Causes too much of a process restart storm.
+
+Test: Switch cutout option
+Bug: 112876936
+Change-Id: I76909bd292c7d6b28c673f068c408885da0d92c1
+(cherry picked from commit 3a04d242688f4c74925b53ef444371bb08a43d46)
+
+BootAnimation: Fix boot animation with hidden cutout
+
+We do this by storing the masking inset in a persistent property.
+The boot animation then animates itself to where it would be if that
+masking inset were applied, then changes the viewport.
+
+For this to work, we also need to make sure the DisplayManagerService
+has the right overlay right at the start.
+
+Bug: 112876936
+Test: Hide cutout, then reboot. Verify boot animation is smooth.
+Change-Id: I3e988b2340b2e0d2be3939bdc6878704c234ccc8
+(cherry picked from commit 5b31a3684a5aa5bb85d2c61503c0fb307a8dcd3a)
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ cmds/bootanimation/BootAnimation.cpp          | 49 ++++++++++++++-
+ cmds/bootanimation/BootAnimation.h            |  4 ++
+ .../android/app/ActivityManagerInternal.java  | 10 +++
+ core/java/android/app/ActivityThread.java     | 11 ++++
+ core/java/android/view/DisplayCutout.java     | 60 ++++++++++--------
+ core/res/res/values/config.xml                | 12 ++++
+ core/res/res/values/dimens.xml                |  9 +++
+ core/res/res/values/symbols.xml               |  3 +
+ .../src/android/view/DisplayCutoutTest.java   | 14 +++++
+ packages/SystemUI/res/values/dimens.xml       |  6 +-
+ .../android/systemui/ScreenDecorations.java   | 34 ++++++++---
+ .../systemui/ScreenDecorationsTest.java       | 14 +++++
+ .../res/values/config.xml                     |  2 +
+ .../res/values/strings.xml                    |  2 +-
+ .../res/values/config.xml                     |  2 +
+ .../res/values/strings.xml                    |  2 +-
+ .../res/values/config.xml                     |  2 +
+ .../res/values/strings.xml                    |  2 +-
+ .../res/values/config.xml                     |  2 +
+ .../res/values/strings.xml                    |  2 +-
+ .../res/values/config.xml                     |  2 +
+ .../res/values/strings.xml                    |  2 +-
+ .../server/am/ActivityManagerService.java     | 19 ++++++
+ .../server/display/DisplayDeviceInfo.java     |  9 +++
+ .../server/display/DisplayManagerService.java | 45 +++++++++++++-
+ .../server/display/LocalDisplayAdapter.java   | 10 +--
+ .../server/display/LogicalDisplay.java        | 61 ++++++++++++++++---
+ .../server/om/OverlayManagerService.java      | 23 ++++++-
+ .../com/android/server/wm/DisplayContent.java | 25 ++++++--
+ .../com/android/server/wm/InputMonitor.java   |  5 ++
+ .../server/wm/ScreenRotationAnimation.java    |  7 +++
+ .../android/server/wm/utils/InsetUtils.java   | 27 ++++++++
+ .../java/com/android/server/SystemServer.java | 11 +++-
+ .../policy/PhoneWindowManagerTestBase.java    | 10 +--
+ .../server/wm/utils/InsetUtilsTest.java       | 29 +++++++++
+ 35 files changed, 458 insertions(+), 69 deletions(-)
+
+diff --git a/cmds/bootanimation/BootAnimation.cpp b/cmds/bootanimation/BootAnimation.cpp
+index 8ffe5bf5931..ed6c25dc49c 100644
+--- a/cmds/bootanimation/BootAnimation.cpp
++++ b/cmds/bootanimation/BootAnimation.cpp
+@@ -302,6 +302,7 @@ status_t BootAnimation::readyToRun() {
+     mHeight = h;
+     mFlingerSurfaceControl = control;
+     mFlingerSurface = s;
++    mTargetInset = -1;
+ 
+     // If the device has encryption turned on or is in process
+     // of being encrypted we show the encrypted boot animation.
+@@ -942,6 +943,7 @@ bool BootAnimation::playAnimation(const Animation& animation)
+                 if (mClockEnabled && mTimeIsAccurate && validClock(part)) {
+                     drawClock(animation.clockFont, part.clockPosX, part.clockPosY);
+                 }
++                handleViewport(frameDuration);
+ 
+                 eglSwapBuffers(mDisplay, mSurface);
+ 
+@@ -966,7 +968,7 @@ bool BootAnimation::playAnimation(const Animation& animation)
+             usleep(part.pause * ns2us(frameDuration));
+ 
+             // For infinite parts, we've now played them at least once, so perhaps exit
+-            if(exitPending() && !part.count)
++            if(exitPending() && !part.count && mCurrentInset >= mTargetInset)
+                 break;
+         }
+ 
+@@ -986,6 +988,51 @@ bool BootAnimation::playAnimation(const Animation& animation)
+     return true;
+ }
+ 
++void BootAnimation::handleViewport(nsecs_t timestep) {
++    if (mShuttingDown || !mFlingerSurfaceControl || mTargetInset == 0) {
++        return;
++    }
++    if (mTargetInset < 0) {
++        // Poll the amount for the top display inset. This will return -1 until persistent properties
++        // have been loaded.
++        mTargetInset = android::base::GetIntProperty("persist.sys.displayinset.top",
++                -1 /* default */, -1 /* min */, mHeight / 2 /* max */);
++    }
++    if (mTargetInset <= 0) {
++        return;
++    }
++
++    if (mCurrentInset < mTargetInset) {
++        // After the device boots, the inset will effectively be cropped away. We animate this here.
++        float fraction = static_cast<float>(mCurrentInset) / mTargetInset;
++        int interpolatedInset = (cosf((fraction + 1) * M_PI) / 2.0f + 0.5f) * mTargetInset;
++
++        SurfaceComposerClient::Transaction()
++                .setCrop(mFlingerSurfaceControl, Rect(0, interpolatedInset, mWidth, mHeight))
++                .apply();
++    } else {
++        // At the end of the animation, we switch to the viewport that DisplayManager will apply
++        // later. This changes the coordinate system, and means we must move the surface up by
++        // the inset amount.
++        sp<IBinder> dtoken(SurfaceComposerClient::getBuiltInDisplay(
++                ISurfaceComposer::eDisplayIdMain));
++
++        Rect layerStackRect(0, 0, mWidth, mHeight - mTargetInset);
++        Rect displayRect(0, mTargetInset, mWidth, mHeight);
++
++        SurfaceComposerClient::Transaction t;
++        t.setPosition(mFlingerSurfaceControl, 0, -mTargetInset)
++                .setCrop(mFlingerSurfaceControl, Rect(0, mTargetInset, mWidth, mHeight));
++        t.setDisplayProjection(dtoken, 0 /* orientation */, layerStackRect, displayRect);
++        t.apply();
++
++        mTargetInset = mCurrentInset = 0;
++    }
++
++    int delta = timestep * mTargetInset / ms2ns(200);
++    mCurrentInset += delta;
++}
++
+ void BootAnimation::releaseAnimation(Animation* animation) const
+ {
+     for (Vector<Animation::Part>::iterator it = animation->parts.begin(),
+diff --git a/cmds/bootanimation/BootAnimation.h b/cmds/bootanimation/BootAnimation.h
+index 56e131523bc..b4699d88468 100644
+--- a/cmds/bootanimation/BootAnimation.h
++++ b/cmds/bootanimation/BootAnimation.h
+@@ -157,11 +157,15 @@ private:
+ 
+     void checkExit();
+ 
++    void handleViewport(nsecs_t timestep);
++
+     sp<SurfaceComposerClient>       mSession;
+     AssetManager mAssets;
+     Texture     mAndroid[2];
+     int         mWidth;
+     int         mHeight;
++    int         mCurrentInset;
++    int         mTargetInset;
+     bool        mUseNpotTextures = false;
+     EGLDisplay  mDisplay;
+     EGLDisplay  mContext;
+diff --git a/core/java/android/app/ActivityManagerInternal.java b/core/java/android/app/ActivityManagerInternal.java
+index 1d5f49a879d..dde14d17d53 100644
+--- a/core/java/android/app/ActivityManagerInternal.java
++++ b/core/java/android/app/ActivityManagerInternal.java
+@@ -407,4 +407,14 @@ public abstract class ActivityManagerInternal {
+      * has {@code permission}.
+      */
+     public abstract void enforceCallerIsRecentsOrHasPermission(String permission, String func);
++
++    /**
++     * @return The intent used to launch the home activity.
++     */
++    public abstract Intent getHomeIntent();
++
++    /**
++     * WindowManager notifies AM when display size of the default display changes.
++     */
++    public abstract void notifyDefaultDisplaySizeChanged();
+ }
+diff --git a/core/java/android/app/ActivityThread.java b/core/java/android/app/ActivityThread.java
+index 87b334992d2..ab0b88c22d2 100644
+--- a/core/java/android/app/ActivityThread.java
++++ b/core/java/android/app/ActivityThread.java
+@@ -146,6 +146,7 @@ import com.android.internal.os.RuntimeInit;
+ import com.android.internal.os.SomeArgs;
+ import com.android.internal.util.ArrayUtils;
+ import com.android.internal.util.FastPrintWriter;
++import com.android.internal.util.Preconditions;
+ import com.android.internal.util.function.pooled.PooledLambda;
+ import com.android.org.conscrypt.OpenSSLSocketImpl;
+ import com.android.org.conscrypt.TrustedCertificateStore;
+@@ -5144,6 +5145,16 @@ public final class ActivityThread extends ClientTransactionHandler {
+         }
+     }
+ 
++    /**
++     * Updates the application info.
++     *
++     * This only works in the system process. Must be called on the main thread.
++     */
++    public void handleSystemApplicationInfoChanged(@NonNull ApplicationInfo ai) {
++        Preconditions.checkState(mSystemThread, "Must only be called in the system process");
++        handleApplicationInfoChanged(ai);
++    }
++
+     void handleApplicationInfoChanged(@NonNull final ApplicationInfo ai) {
+         // Updates triggered by package installation go through a package update
+         // receiver. Here we try to capture ApplicationInfo changes that are
+diff --git a/core/java/android/view/DisplayCutout.java b/core/java/android/view/DisplayCutout.java
+index 47bda538ae5..5f80d31651a 100644
+--- a/core/java/android/view/DisplayCutout.java
++++ b/core/java/android/view/DisplayCutout.java
+@@ -29,6 +29,7 @@ import android.graphics.Path;
+ import android.graphics.Rect;
+ import android.graphics.RectF;
+ import android.graphics.Region;
++import android.graphics.Region.Op;
+ import android.os.Parcel;
+ import android.os.Parcelable;
+ import android.text.TextUtils;
+@@ -324,15 +325,11 @@ public final class DisplayCutout {
+      *
+      * @hide
+      */
++    @VisibleForTesting
+     public static DisplayCutout fromBoundingRect(int left, int top, int right, int bottom) {
+-        Path path = new Path();
+-        path.reset();
+-        path.moveTo(left, top);
+-        path.lineTo(left, bottom);
+-        path.lineTo(right, bottom);
+-        path.lineTo(right, top);
+-        path.close();
+-        return fromBounds(path);
++        Region r = Region.obtain();
++        r.set(left, top, right, bottom);
++        return fromBounds(r);
+     }
+ 
+     /**
+@@ -340,26 +337,19 @@ public final class DisplayCutout {
+      *
+      * @hide
+      */
+-    public static DisplayCutout fromBounds(Path path) {
+-        RectF clipRect = new RectF();
+-        path.computeBounds(clipRect, false /* unused */);
+-        Region clipRegion = Region.obtain();
+-        clipRegion.set((int) clipRect.left, (int) clipRect.top,
+-                (int) clipRect.right, (int) clipRect.bottom);
+-
+-        Region bounds = new Region();
+-        bounds.setPath(path, clipRegion);
+-        clipRegion.recycle();
+-        return new DisplayCutout(ZERO_RECT, bounds, false /* copyArguments */);
++    public static DisplayCutout fromBounds(Region region) {
++        return new DisplayCutout(ZERO_RECT, region, false /* copyArguments */);
+     }
+ 
+     /**
+-     * Creates the bounding path according to @android:string/config_mainBuiltInDisplayCutout.
++     * Creates the display cutout according to
++     * @android:string/config_mainBuiltInDisplayCutoutRectApproximation, which is the closest
++     * rectangle-base approximation of the cutout.
+      *
+      * @hide
+      */
+-    public static DisplayCutout fromResources(Resources res, int displayWidth, int displayHeight) {
+-        return fromSpec(res.getString(R.string.config_mainBuiltInDisplayCutout),
++    public static DisplayCutout fromResourcesRectApproximation(Resources res, int displayWidth, int displayHeight) {
++        return fromSpec(res.getString(R.string.config_mainBuiltInDisplayCutoutRectApproximation),
+                 displayWidth, displayHeight, DENSITY_DEVICE_STABLE / (float) DENSITY_DEFAULT);
+     }
+ 
+@@ -369,7 +359,8 @@ public final class DisplayCutout {
+      * @hide
+      */
+     public static Path pathFromResources(Resources res, int displayWidth, int displayHeight) {
+-        return pathAndDisplayCutoutFromSpec(res.getString(R.string.config_mainBuiltInDisplayCutout),
++        return pathAndDisplayCutoutFromSpec(
++                res.getString(R.string.config_mainBuiltInDisplayCutout),
+                 displayWidth, displayHeight, DENSITY_DEVICE_STABLE / (float) DENSITY_DEFAULT).first;
+     }
+ 
+@@ -417,6 +408,7 @@ public final class DisplayCutout {
+         }
+ 
+         final Path p;
++        final Region r = Region.obtain();
+         try {
+             p = PathParser.createPathFromPathData(spec);
+         } catch (Throwable e) {
+@@ -431,6 +423,11 @@ public final class DisplayCutout {
+         m.postTranslate(offsetX, 0);
+         p.transform(m);
+ 
++        final Rect tmpRect = new Rect();
++        toRectAndAddToRegion(p, r, tmpRect);
++        final int topInset = tmpRect.bottom;
++
++        final int bottomInset;
+         if (bottomSpec != null) {
+             final Path bottomPath;
+             try {
+@@ -443,9 +440,17 @@ public final class DisplayCutout {
+             m.postTranslate(0, displayHeight);
+             bottomPath.transform(m);
+             p.addPath(bottomPath);
++            toRectAndAddToRegion(bottomPath, r, tmpRect);
++            bottomInset = displayHeight - tmpRect.top;
++        } else {
++            bottomInset = 0;
+         }
+ 
+-        final Pair<Path, DisplayCutout> result = new Pair<>(p, fromBounds(p));
++        // Reuse tmpRect as the inset rect we store into the DisplayCutout instance.
++        tmpRect.set(0, topInset, 0, bottomInset);
++        final DisplayCutout cutout = new DisplayCutout(tmpRect, r, false /* copyArguments */);
++
++        final Pair<Path, DisplayCutout> result = new Pair<>(p, cutout);
+         synchronized (CACHE_LOCK) {
+             sCachedSpec = spec;
+             sCachedDisplayWidth = displayWidth;
+@@ -456,6 +461,13 @@ public final class DisplayCutout {
+         return result;
+     }
+ 
++    private static void toRectAndAddToRegion(Path p, Region inoutRegion, Rect inoutRect) {
++        final RectF rectF = new RectF();
++        p.computeBounds(rectF, false /* unused */);
++        rectF.round(inoutRect);
++        inoutRegion.op(inoutRect, Op.UNION);
++    }
++
+     private static Region boundingRectsToRegion(List<Rect> rects) {
+         Region result = Region.obtain();
+         if (rects != null) {
+diff --git a/core/res/res/values/config.xml b/core/res/res/values/config.xml
+index 6a97c7aef4b..8000b95bb47 100644
+--- a/core/res/res/values/config.xml
++++ b/core/res/res/values/config.xml
+@@ -2938,11 +2938,23 @@
+          -->
+     <string translatable="false" name="config_mainBuiltInDisplayCutout"></string>
+ 
++    <!-- Like config_mainBuiltInDisplayCutout, but this path is used to report the
++         one single bounding rect per device edge to the app via
++         {@link DisplayCutout#getBoundingRect}. Note that this path should try to match the visual
++         appearance of the cutout as much as possible, and may be smaller than
++         config_mainBuiltInDisplayCutout
++         -->
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+          -->
+     <bool name="config_fillMainBuiltInDisplayCutout">false</bool>
+ 
++    <!-- If true, and there is a cutout on the main built in display, the cutout will be masked
++         by shrinking the display such that it does not overlap the cutout area. -->
++    <bool name="config_maskMainBuiltInDisplayCutout">false</bool>
++
+     <!-- Ultrasound support for Mic/speaker path -->
+     <!-- Whether the default microphone audio source supports near-ultrasound frequencies
+          (range of 18 - 21 kHz). -->
+diff --git a/core/res/res/values/dimens.xml b/core/res/res/values/dimens.xml
+index 471170bbe93..73cb59e8464 100644
+--- a/core/res/res/values/dimens.xml
++++ b/core/res/res/values/dimens.xml
+@@ -61,6 +61,15 @@
+     <!-- Margin at the edge of the screen to ignore touch events for in the windowshade. -->
+     <dimen name="status_bar_edge_ignore">5dp</dimen>
+ 
++    <!-- Default radius of the software rounded corners. -->
++    <dimen name="rounded_corner_radius">0dp</dimen>
++    <!-- Radius of the software rounded corners at the top of the display in its natural
++        orientation. If zero, the value of rounded_corner_radius is used. -->
++    <dimen name="rounded_corner_radius_top">0dp</dimen>
++    <!-- Radius of the software rounded corners at the bottom of the display in its natural
++        orientation. If zero, the value of rounded_corner_radius is used. -->
++    <dimen name="rounded_corner_radius_bottom">0dp</dimen>
++
+     <!-- Width of the window of the divider bar used to resize docked stacks. -->
+     <dimen name="docked_stack_divider_thickness">48dp</dimen>
+ 
+diff --git a/core/res/res/values/symbols.xml b/core/res/res/values/symbols.xml
+index 8aa36a9354b..bb1440ceac1 100644
+--- a/core/res/res/values/symbols.xml
++++ b/core/res/res/values/symbols.xml
+@@ -3330,6 +3330,7 @@
+ 
+   <java-symbol type="string" name="global_action_logout" />
+   <java-symbol type="string" name="config_mainBuiltInDisplayCutout" />
++  <java-symbol type="string" name="config_mainBuiltInDisplayCutoutRectApproximation" />
+   <java-symbol type="drawable" name="messaging_user" />
+   <java-symbol type="bool" name="config_fillMainBuiltInDisplayCutout" />
+   <java-symbol type="drawable" name="ic_logout" />
+@@ -3403,4 +3404,6 @@
+ 
+   <!-- Proximity check on screen on default -->
+   <java-symbol type="bool" name="config_proximityCheckOnWakeEnabledByDefault" />
++
++  <java-symbol type="bool" name="config_maskMainBuiltInDisplayCutout" />
+ </resources>
+diff --git a/core/tests/coretests/src/android/view/DisplayCutoutTest.java b/core/tests/coretests/src/android/view/DisplayCutoutTest.java
+index 6ee74cb9a74..fe45fe7d3aa 100644
+--- a/core/tests/coretests/src/android/view/DisplayCutoutTest.java
++++ b/core/tests/coretests/src/android/view/DisplayCutoutTest.java
+@@ -19,6 +19,7 @@ package android.view;
+ import static android.view.DisplayCutout.NO_CUTOUT;
+ import static android.view.DisplayCutout.fromSpec;
+ 
++import static org.hamcrest.Matchers.equalTo;
+ import static org.hamcrest.Matchers.not;
+ import static org.hamcrest.Matchers.sameInstance;
+ import static org.junit.Assert.assertEquals;
+@@ -219,6 +220,19 @@ public class DisplayCutoutTest {
+         assertThat(fromSpec("L1,0 L1,1 L0,1 z", 200, 400, 1f), not(sameInstance(cached)));
+     }
+ 
++    @Test
++    public void fromSpec_setsSafeInsets_top() {
++        DisplayCutout cutout = fromSpec("M -50,0 v 20 h 100 v -20 z", 200, 400, 2f);
++        assertThat(cutout.getSafeInsets(), equalTo(new Rect(0, 20, 0, 0)));
++    }
++
++    @Test
++    public void fromSpec_setsSafeInsets_top_and_bottom() {
++        DisplayCutout cutout = fromSpec("M -50,0 v 20 h 100 v -20 z"
++                + "@bottom M -50,0 v -10,0 h 100 v 20 z", 200, 400, 2f);
++        assertThat(cutout.getSafeInsets(), equalTo(new Rect(0, 20, 0, 10)));
++    }
++
+     @Test
+     public void parcel_unparcel_nocutout() {
+         Parcel p = Parcel.obtain();
+diff --git a/packages/SystemUI/res/values/dimens.xml b/packages/SystemUI/res/values/dimens.xml
+index f00957a14e0..5f0ec221630 100644
+--- a/packages/SystemUI/res/values/dimens.xml
++++ b/packages/SystemUI/res/values/dimens.xml
+@@ -935,9 +935,9 @@
+     <dimen name="bottom_padding">48dp</dimen>
+     <dimen name="edge_margin">8dp</dimen>
+ 
+-    <dimen name="rounded_corner_radius">0dp</dimen>
+-    <dimen name="rounded_corner_radius_top">0dp</dimen>
+-    <dimen name="rounded_corner_radius_bottom">0dp</dimen>
++    <dimen name="rounded_corner_radius">@*android:dimen/rounded_corner_radius</dimen>
++    <dimen name="rounded_corner_radius_top">@*android:dimen/rounded_corner_radius_top</dimen>
++    <dimen name="rounded_corner_radius_bottom">@*android:dimen/rounded_corner_radius_bottom</dimen>
+     <dimen name="rounded_corner_content_padding">0dp</dimen>
+     <dimen name="nav_content_padding">0dp</dimen>
+     <dimen name="nav_quick_scrub_track_edge_padding">24dp</dimen>
+diff --git a/packages/SystemUI/src/com/android/systemui/ScreenDecorations.java b/packages/SystemUI/src/com/android/systemui/ScreenDecorations.java
+index efaf557660d..566e8a59cc0 100644
+--- a/packages/SystemUI/src/com/android/systemui/ScreenDecorations.java
++++ b/packages/SystemUI/src/com/android/systemui/ScreenDecorations.java
+@@ -81,9 +81,9 @@ public class ScreenDecorations extends SystemUI implements Tunable {
+     private DisplayManager mDisplayManager;
+     private DisplayManager.DisplayListener mDisplayListener;
+ 
+-    private int mRoundedDefault;
+-    private int mRoundedDefaultTop;
+-    private int mRoundedDefaultBottom;
++    @VisibleForTesting protected int mRoundedDefault;
++    @VisibleForTesting protected int mRoundedDefaultTop;
++    @VisibleForTesting protected int mRoundedDefaultBottom;
+     private View mOverlay;
+     private View mBottomOverlay;
+     private float mDensity;
+@@ -93,12 +93,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
+     @Override
+     public void start() {
+         mWindowManager = mContext.getSystemService(WindowManager.class);
+-        mRoundedDefault = mContext.getResources().getDimensionPixelSize(
+-                R.dimen.rounded_corner_radius);
+-        mRoundedDefaultTop = mContext.getResources().getDimensionPixelSize(
+-                R.dimen.rounded_corner_radius_top);
+-        mRoundedDefaultBottom = mContext.getResources().getDimensionPixelSize(
+-                R.dimen.rounded_corner_radius_bottom);
++        updateRoundedCornerRadii();
+         if (hasRoundedCorners() || shouldDrawCutout()) {
+             setupDecorations();
+         }
+@@ -200,6 +195,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
+     @Override
+     protected void onConfigurationChanged(Configuration newConfig) {
+         updateOrientation();
++        updateRoundedCornerRadii();
+         if (shouldDrawCutout() && mOverlay == null) {
+             setupDecorations();
+         }
+@@ -217,6 +213,26 @@ public class ScreenDecorations extends SystemUI implements Tunable {
+         }
+     }
+ 
++    private void updateRoundedCornerRadii() {
++        final int newRoundedDefault = mContext.getResources().getDimensionPixelSize(
++                R.dimen.rounded_corner_radius);
++        final int newRoundedDefaultTop = mContext.getResources().getDimensionPixelSize(
++                R.dimen.rounded_corner_radius_top);
++        final int newRoundedDefaultBottom = mContext.getResources().getDimensionPixelSize(
++                R.dimen.rounded_corner_radius_bottom);
++
++        final boolean roundedCornersChanged = mRoundedDefault != newRoundedDefault
++                || mRoundedDefaultBottom != newRoundedDefaultBottom
++                || mRoundedDefaultTop != newRoundedDefaultTop;
++
++        if (roundedCornersChanged) {
++            mRoundedDefault = newRoundedDefault;
++            mRoundedDefaultTop = newRoundedDefaultTop;
++            mRoundedDefaultBottom = newRoundedDefaultBottom;
++            onTuningChanged(SIZE, null);
++        }
++    }
++
+     private void updateViews() {
+         View topLeft = mOverlay.findViewById(R.id.left);
+         View topRight = mOverlay.findViewById(R.id.right);
+diff --git a/packages/SystemUI/tests/src/com/android/systemui/ScreenDecorationsTest.java b/packages/SystemUI/tests/src/com/android/systemui/ScreenDecorationsTest.java
+index f1bf31d7a58..642b97a2c91 100644
+--- a/packages/SystemUI/tests/src/com/android/systemui/ScreenDecorationsTest.java
++++ b/packages/SystemUI/tests/src/com/android/systemui/ScreenDecorationsTest.java
+@@ -21,6 +21,7 @@ import static com.android.systemui.tuner.TunablePadding.FLAG_START;
+ 
+ import static org.hamcrest.Matchers.is;
+ import static org.junit.Assert.assertThat;
++import static org.junit.Assert.assertEquals;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.anyInt;
+ import static org.mockito.ArgumentMatchers.anyString;
+@@ -195,4 +196,17 @@ public class ScreenDecorationsTest extends SysuiTestCase {
+         verify(padding).destroy();
+     }
+ 
++    @Test
++    public void testUpdateRoundedCorners() {
++        mContext.getOrCreateTestableResources().addOverride(
++                com.android.internal.R.bool.config_fillMainBuiltInDisplayCutout, false);
++        mContext.getOrCreateTestableResources().addOverride(dimen.rounded_corner_radius, 20);
++
++        mScreenDecorations.start();
++        assertEquals(mScreenDecorations.mRoundedDefault, 20);
++
++        mContext.getOrCreateTestableResources().addOverride(dimen.rounded_corner_radius, 5);
++        mScreenDecorations.onConfigurationChanged(null);
++        assertEquals(mScreenDecorations.mRoundedDefault, 5);
++    }
+ }
+diff --git a/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/config.xml b/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/config.xml
+index 80d8066959a..9254b4d65b5 100644
+--- a/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/config.xml
++++ b/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/config.xml
+@@ -37,6 +37,8 @@
+         @right
+     </string>
+ 
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@*android:string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+      -->
+diff --git a/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/strings.xml b/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/strings.xml
+index 754ba722d08..b08924b8adb 100644
+--- a/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/strings.xml
++++ b/packages/overlays/DisplayCutoutEmulationCornerOverlay/res/values/strings.xml
+@@ -16,7 +16,7 @@
+   -->
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+-    <string name="display_cutout_emulation_overlay">Corner display cutout</string>
++    <string name="display_cutout_emulation_overlay">Corner cutout</string>
+ 
+ </resources>
+ 
+diff --git a/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/config.xml b/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/config.xml
+index ca261f98cfa..80c997a4626 100644
+--- a/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/config.xml
++++ b/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/config.xml
+@@ -49,6 +49,8 @@
+         @dp
+     </string>
+ 
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@*android:string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+      -->
+diff --git a/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/strings.xml b/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/strings.xml
+index 68c2dcbbe3f..0a106fa0c08 100644
+--- a/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/strings.xml
++++ b/packages/overlays/DisplayCutoutEmulationDoubleOverlay/res/values/strings.xml
+@@ -16,7 +16,7 @@
+   -->
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+-    <string name="display_cutout_emulation_overlay">Double display cutout</string>
++    <string name="display_cutout_emulation_overlay">Double cutout</string>
+ 
+ </resources>
+ 
+diff --git a/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/config.xml b/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/config.xml
+index c22b2e778ff..6fb3c7f51e2 100644
+--- a/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/config.xml
++++ b/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/config.xml
+@@ -40,6 +40,8 @@
+         @dp
+     </string>
+ 
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@*android:string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+      -->
+diff --git a/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/strings.xml b/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/strings.xml
+index 49896773ac5..0bf83306f87 100644
+--- a/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/strings.xml
++++ b/packages/overlays/DisplayCutoutEmulationNarrowOverlay/res/values/strings.xml
+@@ -18,7 +18,7 @@
+ -->
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+-    <string name="display_cutout_emulation_overlay">Narrow display cutout</string>
++    <string name="display_cutout_emulation_overlay">Narrow cutout</string>
+ 
+ </resources>
+ 
+diff --git a/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/config.xml b/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/config.xml
+index 401e09211ae..7c29ffb92f4 100644
+--- a/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/config.xml
++++ b/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/config.xml
+@@ -40,6 +40,8 @@
+         @dp
+     </string>
+ 
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@*android:string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+      -->
+diff --git a/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/strings.xml b/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/strings.xml
+index 6dcbbd92360..bcc7c9756a6 100644
+--- a/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/strings.xml
++++ b/packages/overlays/DisplayCutoutEmulationTallOverlay/res/values/strings.xml
+@@ -16,7 +16,7 @@
+   -->
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+-    <string name="display_cutout_emulation_overlay">Tall display cutout</string>
++    <string name="display_cutout_emulation_overlay">Tall cutout</string>
+ 
+ </resources>
+ 
+diff --git a/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/config.xml b/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/config.xml
+index f328b83c1cb..5fb8b9e241b 100644
+--- a/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/config.xml
++++ b/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/config.xml
+@@ -40,6 +40,8 @@
+         @dp
+     </string>
+ 
++    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@*android:string/config_mainBuiltInDisplayCutout</string>
++
+     <!-- Whether the display cutout region of the main built-in display should be forced to
+          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+      -->
+diff --git a/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/strings.xml b/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/strings.xml
+index f4b9f7ea7c3..0fcbdebbd34 100644
+--- a/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/strings.xml
++++ b/packages/overlays/DisplayCutoutEmulationWideOverlay/res/values/strings.xml
+@@ -16,7 +16,7 @@
+   -->
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ 
+-    <string name="display_cutout_emulation_overlay">Wide display cutout</string>
++    <string name="display_cutout_emulation_overlay">Wide cutout</string>
+ 
+ </resources>
+ 
+diff --git a/services/core/java/com/android/server/am/ActivityManagerService.java b/services/core/java/com/android/server/am/ActivityManagerService.java
+index 0c1d712a91c..6fe0956bd2a 100644
+--- a/services/core/java/com/android/server/am/ActivityManagerService.java
++++ b/services/core/java/com/android/server/am/ActivityManagerService.java
+@@ -26895,6 +26895,25 @@ public class ActivityManagerService extends IActivityManager.Stub
+         public void enforceCallerIsRecentsOrHasPermission(String permission, String func) {
+             ActivityManagerService.this.enforceCallerIsRecentsOrHasPermission(permission, func);
+         }
++
++        @Override
++        public Intent getHomeIntent() {
++            synchronized (ActivityManagerService.this) {
++                return ActivityManagerService.this.getHomeIntent();
++            }
++        }
++
++        @Override
++        public void notifyDefaultDisplaySizeChanged() {
++            synchronized (this) {
++                if (mSystemServiceManager.isBootCompleted() && mHomeProcess != null) {
++
++                    // TODO: Ugly hack to unblock the release
++                    Slog.i(TAG, "Killing home process because of display size change");
++                    removeProcessLocked(mHomeProcess, false, true, "kill home screen size");
++                }
++            }
++        }
+     }
+ 
+     /**
+diff --git a/services/core/java/com/android/server/display/DisplayDeviceInfo.java b/services/core/java/com/android/server/display/DisplayDeviceInfo.java
+index 349e1c8b713..512e85192d3 100644
+--- a/services/core/java/com/android/server/display/DisplayDeviceInfo.java
++++ b/services/core/java/com/android/server/display/DisplayDeviceInfo.java
+@@ -103,6 +103,12 @@ final class DisplayDeviceInfo {
+      */
+     public static final int FLAG_DESTROY_CONTENT_ON_REMOVAL = 1 << 10;
+ 
++    /**
++     * Flag: The display cutout of this display is masked.
++     * @hide
++     */
++    public static final int FLAG_MASK_DISPLAY_CUTOUT = 1 << 11;
++
+     /**
+      * Touch attachment: Display does not receive touch.
+      */
+@@ -453,6 +459,9 @@ final class DisplayDeviceInfo {
+         if ((flags & FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
+             msg.append(", FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD");
+         }
++        if ((flags & FLAG_MASK_DISPLAY_CUTOUT) != 0) {
++            msg.append(", FLAG_MASK_DISPLAY_CUTOUT");
++        }
+         return msg.toString();
+     }
+ }
+diff --git a/services/core/java/com/android/server/display/DisplayManagerService.java b/services/core/java/com/android/server/display/DisplayManagerService.java
+index ddd8855f319..cc5a8271eb5 100644
+--- a/services/core/java/com/android/server/display/DisplayManagerService.java
++++ b/services/core/java/com/android/server/display/DisplayManagerService.java
+@@ -151,6 +151,8 @@ public final class DisplayManagerService extends SystemService {
+     // Otherwise WFD is enabled according to the value of config_enableWifiDisplay.
+     private static final String FORCE_WIFI_DISPLAY_ENABLE = "persist.debug.wfd.enable";
+ 
++    private static final String PROP_DEFAULT_DISPLAY_TOP_INSET = "persist.sys.displayinset.top";
++
+     private static final long WAIT_FOR_DEFAULT_DISPLAY_TIMEOUT = 10000;
+ 
+     private static final int MSG_REGISTER_DEFAULT_DISPLAY_ADAPTERS = 1;
+@@ -243,6 +245,15 @@ public final class DisplayManagerService extends SystemService {
+     // device).
+     private Point mStableDisplaySize = new Point();
+ 
++    // Whether the system has finished booting or not.
++    private boolean mSystemReady;
++
++    // The top inset of the default display.
++    // This gets persisted so that the boot animation knows how to transition from the display's
++    // full size to the size configured by the user. Right now we only persist and animate the top
++    // inset, but theoretically we could do it for all of them.
++    private int mDefaultDisplayTopInset;
++
+     // Viewports of the default display and the display that should receive touch
+     // input from an external source.  Used by the input system.
+     private final DisplayViewport mDefaultViewport = new DisplayViewport();
+@@ -301,6 +312,7 @@ public final class DisplayManagerService extends SystemService {
+         Resources resources = mContext.getResources();
+         mDefaultDisplayDefaultColorMode = mContext.getResources().getInteger(
+                 com.android.internal.R.integer.config_defaultDisplayDefaultColorMode);
++        mDefaultDisplayTopInset = SystemProperties.getInt(PROP_DEFAULT_DISPLAY_TOP_INSET, -1);
+         float[] lux = getFloatArray(resources.obtainTypedArray(
+                 com.android.internal.R.array.config_minimumBrightnessCurveLux));
+         float[] nits = getFloatArray(resources.obtainTypedArray(
+@@ -311,6 +323,8 @@ public final class DisplayManagerService extends SystemService {
+         PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+         mGlobalDisplayBrightness = pm.getDefaultScreenBrightnessSetting();
+         mCurrentUserId = UserHandle.USER_SYSTEM;
++
++        mSystemReady = false;
+     }
+ 
+     public void setupSchedulerPolicies() {
+@@ -400,6 +414,10 @@ public final class DisplayManagerService extends SystemService {
+         synchronized (mSyncRoot) {
+             mSafeMode = safeMode;
+             mOnlyCore = onlyCore;
++            mSystemReady = true;
++            // Just in case the top inset changed before the system was ready. At this point, any
++            // relevant configuration should be in place.
++            recordTopInsetLocked(mLogicalDisplays.get(Display.DEFAULT_DISPLAY));
+         }
+ 
+         mHandler.sendEmptyMessage(MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS);
+@@ -457,7 +475,7 @@ public final class DisplayManagerService extends SystemService {
+             LogicalDisplay display = mLogicalDisplays.get(displayId);
+             if (display != null) {
+                 if (display.setDisplayInfoOverrideFromWindowManagerLocked(info)) {
+-                    sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
++                    handleLogicalDisplayChanged(displayId, display);
+                     scheduleTraversalLocked(false);
+                 }
+             }
+@@ -938,6 +956,13 @@ public final class DisplayManagerService extends SystemService {
+         scheduleTraversalLocked(false);
+     }
+ 
++    private void handleLogicalDisplayChanged(int displayId, @NonNull LogicalDisplay display) {
++        if (displayId == Display.DEFAULT_DISPLAY) {
++            recordTopInsetLocked(display);
++        }
++        sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
++    }
++
+     private void applyGlobalDisplayStateLocked(List<Runnable> workQueue) {
+         final int count = mDisplayDevices.size();
+         for (int i = 0; i < count; i++) {
+@@ -991,6 +1016,7 @@ public final class DisplayManagerService extends SystemService {
+         configureColorModeLocked(display, device);
+         if (isDefault) {
+             recordStableDisplayStatsIfNeededLocked(display);
++            recordTopInsetLocked(display);
+         }
+ 
+         mLogicalDisplays.put(displayId, display);
+@@ -1039,6 +1065,21 @@ public final class DisplayManagerService extends SystemService {
+         }
+     }
+ 
++    private void recordTopInsetLocked(@Nullable LogicalDisplay d) {
++        // We must only persist the inset after boot has completed, otherwise we will end up
++        // overwriting the persisted value before the masking flag has been loaded from the
++        // resource overlay.
++        if (!mSystemReady || d == null) {
++            return;
++        }
++        int topInset = d.getInsets().top;
++        if (topInset == mDefaultDisplayTopInset) {
++            return;
++        }
++        mDefaultDisplayTopInset = topInset;
++        SystemProperties.set(PROP_DEFAULT_DISPLAY_TOP_INSET, Integer.toString(topInset));
++    }
++
+     private void setStableDisplaySizeLocked(int width, int height) {
+         mStableDisplaySize = new Point(width, height);
+         try {
+@@ -1118,7 +1159,7 @@ public final class DisplayManagerService extends SystemService {
+                 sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_REMOVED);
+                 changed = true;
+             } else if (!mTempDisplayInfo.equals(display.getDisplayInfoLocked())) {
+-                sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
++                handleLogicalDisplayChanged(displayId, display);
+                 changed = true;
+             }
+         }
+diff --git a/services/core/java/com/android/server/display/LocalDisplayAdapter.java b/services/core/java/com/android/server/display/LocalDisplayAdapter.java
+index b9a279ad13e..16d82df4dd5 100644
+--- a/services/core/java/com/android/server/display/LocalDisplayAdapter.java
++++ b/services/core/java/com/android/server/display/LocalDisplayAdapter.java
+@@ -31,8 +31,6 @@ import android.os.Looper;
+ import android.os.PowerManager;
+ import android.os.SystemProperties;
+ import android.os.Trace;
+-import android.text.TextUtils;
+-import android.util.PathParser;
+ import android.util.Slog;
+ import android.util.SparseArray;
+ import android.view.Display;
+@@ -404,8 +402,12 @@ final class LocalDisplayAdapter extends DisplayAdapter {
+                             && SystemProperties.getBoolean(PROPERTY_EMULATOR_CIRCULAR, false))) {
+                         mInfo.flags |= DisplayDeviceInfo.FLAG_ROUND;
+                     }
+-                    mInfo.displayCutout = DisplayCutout.fromResources(res, mInfo.width,
+-                            mInfo.height);
++                    if (res.getBoolean(
++                            com.android.internal.R.bool.config_maskMainBuiltInDisplayCutout)) {
++                        mInfo.flags |= DisplayDeviceInfo.FLAG_MASK_DISPLAY_CUTOUT;
++                    }
++                    mInfo.displayCutout = DisplayCutout.fromResourcesRectApproximation(res,
++                            mInfo.width, mInfo.height);
+                     mInfo.type = Display.TYPE_BUILT_IN;
+                     mInfo.densityDpi = (int)(phys.density * 160 + 0.5f);
+                     mInfo.xDpi = phys.xDpi;
+diff --git a/services/core/java/com/android/server/display/LogicalDisplay.java b/services/core/java/com/android/server/display/LogicalDisplay.java
+index 23ee56b24b1..5b7c5205ce3 100644
+--- a/services/core/java/com/android/server/display/LogicalDisplay.java
++++ b/services/core/java/com/android/server/display/LogicalDisplay.java
+@@ -18,11 +18,14 @@ package com.android.server.display;
+ 
+ import android.graphics.Rect;
+ import android.hardware.display.DisplayManagerInternal;
++import android.os.SystemProperties;
+ import android.view.Display;
+ import android.view.DisplayInfo;
+ import android.view.Surface;
+ import android.view.SurfaceControl;
+ 
++import com.android.server.wm.utils.InsetUtils;
++
+ import java.io.PrintWriter;
+ import java.util.Arrays;
+ import java.util.List;
+@@ -55,6 +58,8 @@ import java.util.Objects;
+  * </p>
+  */
+ final class LogicalDisplay {
++    private static final String PROP_MASKING_INSET_TOP = "persist.sys.displayinset.top";
++
+     private final DisplayInfo mBaseDisplayInfo = new DisplayInfo();
+ 
+     // The layer stack we use when the display has been blanked to prevent any
+@@ -251,14 +256,18 @@ final class LogicalDisplay {
+             if ((deviceInfo.flags & DisplayDeviceInfo.FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
+                 mBaseDisplayInfo.flags |= Display.FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
+             }
++            Rect maskingInsets = getMaskingInsets(deviceInfo);
++            int maskedWidth = deviceInfo.width - maskingInsets.left - maskingInsets.right;
++            int maskedHeight = deviceInfo.height - maskingInsets.top - maskingInsets.bottom;
++
+             mBaseDisplayInfo.type = deviceInfo.type;
+             mBaseDisplayInfo.address = deviceInfo.address;
+             mBaseDisplayInfo.name = deviceInfo.name;
+             mBaseDisplayInfo.uniqueId = deviceInfo.uniqueId;
+-            mBaseDisplayInfo.appWidth = deviceInfo.width;
+-            mBaseDisplayInfo.appHeight = deviceInfo.height;
+-            mBaseDisplayInfo.logicalWidth = deviceInfo.width;
+-            mBaseDisplayInfo.logicalHeight = deviceInfo.height;
++            mBaseDisplayInfo.appWidth = maskedWidth;
++            mBaseDisplayInfo.appHeight = maskedHeight;
++            mBaseDisplayInfo.logicalWidth = maskedWidth;
++            mBaseDisplayInfo.logicalHeight = maskedHeight;
+             mBaseDisplayInfo.rotation = Surface.ROTATION_0;
+             mBaseDisplayInfo.modeId = deviceInfo.modeId;
+             mBaseDisplayInfo.defaultModeId = deviceInfo.defaultModeId;
+@@ -275,19 +284,44 @@ final class LogicalDisplay {
+             mBaseDisplayInfo.appVsyncOffsetNanos = deviceInfo.appVsyncOffsetNanos;
+             mBaseDisplayInfo.presentationDeadlineNanos = deviceInfo.presentationDeadlineNanos;
+             mBaseDisplayInfo.state = deviceInfo.state;
+-            mBaseDisplayInfo.smallestNominalAppWidth = deviceInfo.width;
+-            mBaseDisplayInfo.smallestNominalAppHeight = deviceInfo.height;
+-            mBaseDisplayInfo.largestNominalAppWidth = deviceInfo.width;
+-            mBaseDisplayInfo.largestNominalAppHeight = deviceInfo.height;
++            mBaseDisplayInfo.smallestNominalAppWidth = maskedWidth;
++            mBaseDisplayInfo.smallestNominalAppHeight = maskedHeight;
++            mBaseDisplayInfo.largestNominalAppWidth = maskedWidth;
++            mBaseDisplayInfo.largestNominalAppHeight = maskedHeight;
+             mBaseDisplayInfo.ownerUid = deviceInfo.ownerUid;
+             mBaseDisplayInfo.ownerPackageName = deviceInfo.ownerPackageName;
+-            mBaseDisplayInfo.displayCutout = deviceInfo.displayCutout;
++            boolean maskCutout =
++                    (deviceInfo.flags & DisplayDeviceInfo.FLAG_MASK_DISPLAY_CUTOUT) != 0;
++            mBaseDisplayInfo.displayCutout = maskCutout ? null : deviceInfo.displayCutout;
+ 
+             mPrimaryDisplayDeviceInfo = deviceInfo;
+             mInfo = null;
+         }
+     }
+ 
++    /**
++     * Return the insets currently applied to the display.
++     *
++     * Note that the base DisplayInfo already takes these insets into account, so if you want to
++     * find out the <b>true</b> size of the display, you need to add them back to the logical
++     * dimensions.
++     */
++    public Rect getInsets() {
++        return getMaskingInsets(mPrimaryDisplayDeviceInfo);
++    }
++
++    /**
++     * Returns insets in ROTATION_0 for areas that are masked.
++     */
++    private static Rect getMaskingInsets(DisplayDeviceInfo deviceInfo) {
++        boolean maskCutout = (deviceInfo.flags & DisplayDeviceInfo.FLAG_MASK_DISPLAY_CUTOUT) != 0;
++        if (maskCutout && deviceInfo.displayCutout != null) {
++            return deviceInfo.displayCutout.getSafeInsets();
++        } else {
++            return new Rect();
++        }
++    }
++
+     /**
+      * Applies the layer stack and transformation to the given display device
+      * so that it shows the contents of this logical display.
+@@ -349,6 +383,12 @@ final class LogicalDisplay {
+         int physWidth = rotated ? displayDeviceInfo.height : displayDeviceInfo.width;
+         int physHeight = rotated ? displayDeviceInfo.width : displayDeviceInfo.height;
+ 
++        Rect maskingInsets = getMaskingInsets(displayDeviceInfo);
++        InsetUtils.rotateInsets(maskingInsets, orientation);
++        // Don't consider the masked area as available when calculating the scaling below.
++        physWidth -= maskingInsets.left + maskingInsets.right;
++        physHeight -= maskingInsets.top + maskingInsets.bottom;
++
+         // Determine whether the width or height is more constrained to be scaled.
+         //    physWidth / displayInfo.logicalWidth    => letter box
+         // or physHeight / displayInfo.logicalHeight  => pillar box
+@@ -375,6 +415,9 @@ final class LogicalDisplay {
+         mTempDisplayRect.set(displayRectLeft, displayRectTop,
+                 displayRectLeft + displayRectWidth, displayRectTop + displayRectHeight);
+ 
++        // Now add back the offset for the masked area.
++        mTempDisplayRect.offset(maskingInsets.left, maskingInsets.top);
++
+         mTempDisplayRect.left += mDisplayOffsetX;
+         mTempDisplayRect.right += mDisplayOffsetX;
+         mTempDisplayRect.top += mDisplayOffsetY;
+diff --git a/services/core/java/com/android/server/om/OverlayManagerService.java b/services/core/java/com/android/server/om/OverlayManagerService.java
+index f082271ab09..c7387018900 100644
+--- a/services/core/java/com/android/server/om/OverlayManagerService.java
++++ b/services/core/java/com/android/server/om/OverlayManagerService.java
+@@ -22,11 +22,14 @@ import static android.content.Intent.ACTION_PACKAGE_CHANGED;
+ import static android.content.Intent.ACTION_PACKAGE_REMOVED;
+ import static android.content.Intent.ACTION_USER_ADDED;
+ import static android.content.Intent.ACTION_USER_REMOVED;
++import static android.content.pm.PackageManager.GET_SHARED_LIBRARY_FILES;
++import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
+ import static android.content.pm.PackageManager.SIGNATURE_MATCH;
+ 
+ import android.annotation.NonNull;
+ import android.annotation.Nullable;
+ import android.app.ActivityManager;
++import android.app.ActivityThread;
+ import android.app.IActivityManager;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+@@ -34,6 +37,7 @@ import android.content.Intent;
+ import android.content.IntentFilter;
+ import android.content.om.IOverlayManager;
+ import android.content.om.OverlayInfo;
++import android.content.pm.ApplicationInfo;
+ import android.content.pm.IPackageManager;
+ import android.content.pm.PackageInfo;
+ import android.content.pm.PackageManagerInternal;
+@@ -269,13 +273,30 @@ public final class OverlayManagerService extends SystemService {
+ 
+     @Override
+     public void onBootPhase(int phase) {
+-        if (phase == PHASE_SYSTEM_SERVICES_READY) {
++        if (phase == PHASE_SYSTEM_SERVICES_READY && mInitCompleteSignal != null) {
+             ConcurrentUtils.waitForFutureNoInterrupt(mInitCompleteSignal,
+                     "Wait for OverlayManagerService init");
+             mInitCompleteSignal = null;
+         }
+     }
+ 
++    public void updateSystemUiContext() {
++        if (mInitCompleteSignal != null) {
++            ConcurrentUtils.waitForFutureNoInterrupt(mInitCompleteSignal,
++                    "Wait for OverlayManagerService init");
++            mInitCompleteSignal = null;
++        }
++
++        final ApplicationInfo ai;
++        try {
++            ai = mPackageManager.mPackageManager.getApplicationInfo("android",
++                    GET_SHARED_LIBRARY_FILES, UserHandle.USER_SYSTEM);
++        } catch (RemoteException e) {
++            throw e.rethrowAsRuntimeException();
++        }
++        ActivityThread.currentActivityThread().handleSystemApplicationInfoChanged(ai);
++    }
++
+     private void initIfNeeded() {
+         final UserManager um = getContext().getSystemService(UserManager.class);
+         final List<UserInfo> users = um.getUsers(true /*excludeDying*/);
+diff --git a/services/core/java/com/android/server/wm/DisplayContent.java b/services/core/java/com/android/server/wm/DisplayContent.java
+index cd8fdbfbc64..91aceee9d7a 100644
+--- a/services/core/java/com/android/server/wm/DisplayContent.java
++++ b/services/core/java/com/android/server/wm/DisplayContent.java
+@@ -1252,11 +1252,21 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
+                     cutout, mInitialDisplayWidth, mInitialDisplayHeight);
+         }
+         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
+-        final Path bounds = cutout.getBounds().getBoundaryPath();
++        final List<Rect> bounds = WmDisplayCutout.computeSafeInsets(
++                        cutout, mInitialDisplayWidth, mInitialDisplayHeight)
++                .getDisplayCutout().getBoundingRects();
+         transformPhysicalToLogicalCoordinates(rotation, mInitialDisplayWidth, mInitialDisplayHeight,
+                 mTmpMatrix);
+-        bounds.transform(mTmpMatrix);
+-        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(bounds),
++        final Region region = Region.obtain();
++        for (int i = 0; i < bounds.size(); i++) {
++            final Rect rect = bounds.get(i);
++            final RectF rectF = new RectF(bounds.get(i));
++            mTmpMatrix.mapRect(rectF);
++            rectF.round(rect);
++            region.op(rect, Op.UNION);
++        }
++
++        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(region),
+                 rotated ? mInitialDisplayHeight : mInitialDisplayWidth,
+                 rotated ? mInitialDisplayWidth : mInitialDisplayHeight);
+     }
+@@ -1764,8 +1774,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
+         final int newDensity = mDisplayInfo.logicalDensityDpi;
+         final DisplayCutout newCutout = mDisplayInfo.displayCutout;
+ 
+-        final boolean displayMetricsChanged = mInitialDisplayWidth != newWidth
+-                || mInitialDisplayHeight != newHeight
++        final boolean sizeChanged = mInitialDisplayWidth != newWidth
++                || mInitialDisplayHeight != newHeight;
++        final boolean displayMetricsChanged = sizeChanged
+                 || mInitialDisplayDensity != mDisplayInfo.logicalDensityDpi
+                 || !Objects.equals(mInitialDisplayCutout, newCutout);
+ 
+@@ -1787,6 +1798,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
+             mInitialDisplayCutout = newCutout;
+             mService.reconfigureDisplayLocked(this);
+         }
++
++        if (isDefaultDisplay && sizeChanged) {
++            mService.mH.post(mService.mAmInternal::notifyDefaultDisplaySizeChanged);
++        }
+     }
+ 
+     /** Sets the maximum width the screen resolution can be */
+diff --git a/services/core/java/com/android/server/wm/InputMonitor.java b/services/core/java/com/android/server/wm/InputMonitor.java
+index 281e0a8441e..a626663c2e6 100644
+--- a/services/core/java/com/android/server/wm/InputMonitor.java
++++ b/services/core/java/com/android/server/wm/InputMonitor.java
+@@ -40,6 +40,7 @@ import android.os.IBinder;
+ import android.os.Looper;
+ import android.os.Process;
+ import android.os.RemoteException;
++import android.os.Trace;
+ import android.os.UserHandle;
+ import android.util.ArrayMap;
+ import android.util.Log;
+@@ -620,6 +621,8 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
+ 
+         private void updateInputWindows(boolean inDrag) {
+ 
++            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "updateInputWindows");
++
+             // TODO: multi-display
+             navInputConsumer = getInputConsumer(INPUT_CONSUMER_NAVIGATION, DEFAULT_DISPLAY);
+             pipInputConsumer = getInputConsumer(INPUT_CONSUMER_PIP, DEFAULT_DISPLAY);
+@@ -645,6 +648,8 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
+             mService.mInputManager.setInputWindows(mInputWindowHandles, mFocusedInputWindowHandle);
+ 
+             clearInputWindowHandlesLw();
++
++            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+         }
+ 
+         @Override
+diff --git a/services/core/java/com/android/server/wm/ScreenRotationAnimation.java b/services/core/java/com/android/server/wm/ScreenRotationAnimation.java
+index fa8a5c66aee..755a571cf5f 100644
+--- a/services/core/java/com/android/server/wm/ScreenRotationAnimation.java
++++ b/services/core/java/com/android/server/wm/ScreenRotationAnimation.java
+@@ -37,6 +37,7 @@ import android.view.DisplayInfo;
+ import android.view.Surface;
+ import android.view.Surface.OutOfResourcesException;
+ import android.view.SurfaceControl;
++import android.view.SurfaceControl.Transaction;
+ import android.view.SurfaceSession;
+ import android.view.animation.Animation;
+ import android.view.animation.AnimationUtils;
+@@ -268,6 +269,12 @@ class ScreenRotationAnimation {
+                     .setSecure(isSecure)
+                     .build();
+ 
++            // In case display bounds change, screenshot buffer and surface may mismatch so set a
++            // scaling mode.
++            Transaction t2 = new Transaction();
++            t2.setOverrideScalingMode(mSurfaceControl, Surface.SCALING_MODE_SCALE_TO_WINDOW);
++            t2.apply(true /* sync */);
++
+             // capture a screenshot into the surface we just created
+             // TODO(multidisplay): we should use the proper display
+             final int displayId = SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN;
+diff --git a/services/core/java/com/android/server/wm/utils/InsetUtils.java b/services/core/java/com/android/server/wm/utils/InsetUtils.java
+index b4a998add37..c8600dd151d 100644
+--- a/services/core/java/com/android/server/wm/utils/InsetUtils.java
++++ b/services/core/java/com/android/server/wm/utils/InsetUtils.java
+@@ -17,6 +17,7 @@
+ package com.android.server.wm.utils;
+ 
+ import android.graphics.Rect;
++import android.view.Surface;
+ 
+ /**
+  * Utility methods to handle insets represented as rects.
+@@ -26,6 +27,32 @@ public class InsetUtils {
+     private InsetUtils() {
+     }
+ 
++    /**
++     * Transforms insets given in one rotation into insets in a different rotation.
++     *
++     * @param inOutInsets the insets to transform, is set to the transformed insets
++     * @param rotationDelta the delta between the new and old rotation.
++     *                      Must be one of Surface.ROTATION_0/90/180/270.
++     */
++    public static void rotateInsets(Rect inOutInsets, int rotationDelta) {
++        final Rect r = inOutInsets;
++        switch (rotationDelta) {
++            case Surface.ROTATION_0:
++                return;
++            case Surface.ROTATION_90:
++                r.set(r.top, r.right, r.bottom, r.left);
++                break;
++            case Surface.ROTATION_180:
++                r.set(r.right, r.bottom, r.left, r.top);
++                break;
++            case Surface.ROTATION_270:
++                r.set(r.bottom, r.left, r.top, r.right);
++                break;
++            default:
++                throw new IllegalArgumentException("Unknown rotation: " + rotationDelta);
++        }
++    }
++
+     /**
+      * Adds {@code insetsToAdd} to {@code inOutInsets}.
+      */
+diff --git a/services/java/com/android/server/SystemServer.java b/services/java/com/android/server/SystemServer.java
+index 1880e9fa362..bb474d8b9e0 100644
+--- a/services/java/com/android/server/SystemServer.java
++++ b/services/java/com/android/server/SystemServer.java
+@@ -28,6 +28,7 @@ import android.content.pm.PackageManager;
+ import android.content.res.Configuration;
+ import android.content.res.Resources.Theme;
+ import android.database.sqlite.SQLiteCompatibilityWalFlags;
++import android.hardware.display.DisplayManagerInternal;
+ import android.os.BaseBundle;
+ import android.os.Binder;
+ import android.os.Build;
+@@ -672,9 +673,17 @@ public final class SystemServer {
+ 
+         // Manages Overlay packages
+         traceBeginAndSlog("StartOverlayManagerService");
+-        mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
++        OverlayManagerService overlayManagerService = new OverlayManagerService(
++                mSystemContext, installer);
++        mSystemServiceManager.startService(overlayManagerService);
+         traceEnd();
+ 
++        if (SystemProperties.getInt("persist.sys.displayinset.top", 0) > 0) {
++            // DisplayManager needs the overlay immediately.
++            overlayManagerService.updateSystemUiContext();
++            LocalServices.getService(DisplayManagerInternal.class).onOverlayChanged();
++        }
++
+         // The sensor service needs access to package manager service, app ops
+         // service, and permissions service, therefore we start it after them.
+         // Start sensor service in a separate thread. Completion should be checked
+diff --git a/services/tests/servicestests/src/com/android/server/policy/PhoneWindowManagerTestBase.java b/services/tests/servicestests/src/com/android/server/policy/PhoneWindowManagerTestBase.java
+index 2c47a9432ef..1d378020fa4 100644
+--- a/services/tests/servicestests/src/com/android/server/policy/PhoneWindowManagerTestBase.java
++++ b/services/tests/servicestests/src/com/android/server/policy/PhoneWindowManagerTestBase.java
+@@ -37,6 +37,7 @@ import android.graphics.Matrix;
+ import android.graphics.Path;
+ import android.graphics.PixelFormat;
+ import android.graphics.Rect;
++import android.graphics.RectF;
+ import android.os.IBinder;
+ import android.os.UserHandle;
+ import android.support.test.InstrumentationRegistry;
+@@ -172,15 +173,14 @@ public class PhoneWindowManagerTestBase {
+     }
+ 
+     private static DisplayCutout displayCutoutForRotation(int rotation) {
+-        Path p = new Path();
+-        p.addRect(DISPLAY_WIDTH / 4, 0, DISPLAY_WIDTH * 3 / 4, DISPLAY_CUTOUT_HEIGHT,
+-                Path.Direction.CCW);
++        RectF rectF = new RectF(DISPLAY_WIDTH / 4, 0, DISPLAY_WIDTH * 3 / 4, DISPLAY_CUTOUT_HEIGHT);
+ 
+         Matrix m = new Matrix();
+         transformPhysicalToLogicalCoordinates(rotation, DISPLAY_WIDTH, DISPLAY_HEIGHT, m);
+-        p.transform(m);
++        m.mapRect(rectF);
+ 
+-        return DisplayCutout.fromBounds(p);
++        return DisplayCutout.fromBoundingRect((int) rectF.left, (int) rectF.top,
++                (int) rectF.right, (int) rectF.bottom);
+     }
+ 
+     static class TestContextWrapper extends ContextWrapper {
+diff --git a/services/tests/servicestests/src/com/android/server/wm/utils/InsetUtilsTest.java b/services/tests/servicestests/src/com/android/server/wm/utils/InsetUtilsTest.java
+index d0f0fe315bc..08bcc3d751f 100644
+--- a/services/tests/servicestests/src/com/android/server/wm/utils/InsetUtilsTest.java
++++ b/services/tests/servicestests/src/com/android/server/wm/utils/InsetUtilsTest.java
+@@ -16,6 +16,11 @@
+ 
+ package com.android.server.wm.utils;
+ 
++import static android.hardware.camera2.params.OutputConfiguration.ROTATION_90;
++import static android.view.Surface.ROTATION_0;
++import static android.view.Surface.ROTATION_180;
++import static android.view.Surface.ROTATION_270;
++
+ import static junit.framework.Assert.assertEquals;
+ 
+ import android.graphics.Rect;
+@@ -39,5 +44,29 @@ public class InsetUtilsTest {
+         InsetUtils.addInsets(rect1, rect2);
+         assertEquals(new Rect(60, 80, 100, 120), rect1);
+     }
++
++    @Test
++    public void rotate() {
++        final Rect original = new Rect(1, 2, 3, 4);
++
++        assertEquals("rot0", original, rotateCopy(original, ROTATION_0));
++
++        final Rect rot90 = rotateCopy(original, ROTATION_90);
++        assertEquals("rot90", new Rect(2, 3, 4, 1), rot90);
++
++        final Rect rot180 = rotateCopy(original, ROTATION_180);
++        assertEquals("rot180", new Rect(3, 4, 1, 2), rot180);
++        assertEquals("rot90(rot90)=rot180", rotateCopy(rot90, ROTATION_90), rot180);
++
++        final Rect rot270 = rotateCopy(original, ROTATION_270);
++        assertEquals("rot270", new Rect(4, 1, 2, 3), rot270);
++        assertEquals("rot90(rot180)=rot270", rotateCopy(rot180, ROTATION_90), rot270);
++    }
++
++    private static Rect rotateCopy(Rect insets, int rotationDelta) {
++        final Rect copy = new Rect(insets);
++        InsetUtils.rotateInsets(copy, rotationDelta);
++        return copy;
++    }
+ }
+ 
+-- 
+2.17.1
+
