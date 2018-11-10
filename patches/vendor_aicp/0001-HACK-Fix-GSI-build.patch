@@ -1,0 +1,34 @@
+From 9fc35a476ebdd646e867c2cba995a64b2ac25e22 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 10 Nov 2018 12:39:19 +0900
+Subject: [PATCH 1/1] HACK: Fix GSI build
+
+Change-Id: I01c4a2fe0cd05f49538cffa518fb3d1b60e5753f
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ build/soong/Android.bp | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/build/soong/Android.bp b/build/soong/Android.bp
+index af7b956c..e0255902 100644
+--- a/build/soong/Android.bp
++++ b/build/soong/Android.bp
+@@ -27,14 +27,11 @@ aicp_generator {
+     name: "generated_kernel_includes",
+ 
+     // The headers make command
+-    cmd: "make $(KERNEL_MAKE_FLAGS) -C $(TARGET_KERNEL_SOURCE) O=$(genDir) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) headers_install",
++    cmd: "make headers_install",
+ 
+     // Directories that can be imported by a cc_* module generated_headers property
+     export_include_dirs: ["usr/include"],
+ 
+-    // Sources for dependency tracking
+-    dep_root: "$(TARGET_KERNEL_SOURCE)",
+-    dep_files: [ "Makefile", "include/**/*", "arch/$(KERNEL_ARCH)/include/**/*", "techpack/audio/include/**/*"],
+ }
+ 
+ cc_library_headers {
+-- 
+2.17.1
+
