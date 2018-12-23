@@ -1,0 +1,61 @@
+From 0cbfe3194a9035372dbb1e5b73cb6c4fac3fd607 Mon Sep 17 00:00:00 2001
+From: xyyx <xyyx@mail.ru>
+Date: Sun, 23 Dec 2018 16:26:55 +0900
+Subject: [PATCH 1/1] BatteryInfo: Use real battery info for lockscreen
+ charging.
+
+Use current_now and voltage_now instead current_max and voltage_max.
+*To enable this:
+BOARD_GLOBAL_CFLAGS += -DBATTERY_REAL_INFO
+
+in your BoardCommon.mk
+
+Change-Id: I444cf183a70c0a28d2496e6d2da9d6f66e12287f
+Signed-off-by: spezi77 <spezi77@gmx.com>
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ healthd/BatteryMonitor.cpp | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/healthd/BatteryMonitor.cpp b/healthd/BatteryMonitor.cpp
+index 049534021..711920438 100644
+--- a/healthd/BatteryMonitor.cpp
++++ b/healthd/BatteryMonitor.cpp
+@@ -40,6 +40,10 @@
+ 
+ #define POWER_SUPPLY_SUBSYSTEM "power_supply"
+ #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
++#ifdef BATTERY_REAL_INFO
++#define SYSFS_BATTERY_CURRENT "/sys/class/power_supply/battery/current_now"
++#define SYSFS_BATTERY_VOLTAGE "/sys/class/power_supply/battery/voltage_now"
++#endif
+ #define FAKE_BATTERY_CAPACITY 42
+ #define FAKE_BATTERY_TEMPERATURE 424
+ #define MILLION 1.0e6
+@@ -298,6 +302,14 @@ bool BatteryMonitor::update(void) {
+                 KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
+                              mChargerNames[i].string());
+             }
++#ifdef BATTERY_REAL_INFO
++                int ChargingCurrent =
++                      (access(SYSFS_BATTERY_CURRENT, R_OK) == 0) ? abs(getIntField(String8(SYSFS_BATTERY_CURRENT))) : 0;
++
++                int ChargingVoltage =
++                      (access(SYSFS_BATTERY_VOLTAGE, R_OK) == 0) ? getIntField(String8(SYSFS_BATTERY_VOLTAGE)) :
++                       DEFAULT_VBUS_VOLTAGE;
++#else
+             path.clear();
+             path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
+                               mChargerNames[i].string());
+@@ -315,6 +327,8 @@ bool BatteryMonitor::update(void) {
+             if (ChargingVoltage == 0) {
+                 ChargingVoltage = DEFAULT_VBUS_VOLTAGE;
+             }
++#endif
++
+             double power = ((double)ChargingCurrent / MILLION) *
+                            ((double)ChargingVoltage / MILLION);
+             if (MaxPower < power) {
+-- 
+2.17.1
+
