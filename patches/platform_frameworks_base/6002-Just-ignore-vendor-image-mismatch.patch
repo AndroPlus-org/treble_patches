@@ -1,0 +1,26 @@
+From 14ef9902c05a8d9d7f270cc11721270304e54347 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sun, 30 Dec 2018 13:48:17 +0900
+Subject: [PATCH 1/1] Just ignore vendor image mismatch
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ core/java/android/os/Build.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
+index cbff0f33929..171a2604246 100644
+--- a/core/java/android/os/Build.java
++++ b/core/java/android/os/Build.java
+@@ -1053,7 +1053,7 @@ public class Build {
+             if (!Objects.equals(system, vendor)) {
+                 Slog.e(TAG, "Mismatched fingerprints; system reported " + system
+                         + " but vendor reported " + vendor);
+-                return false;
++                return true;
+             }
+         }
+ 
+-- 
+2.17.1
+
