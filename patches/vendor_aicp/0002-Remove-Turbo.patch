@@ -1,0 +1,31 @@
+From 2928eff8378e62150e9df514d05b08092a2e8195 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Thu, 3 Jan 2019 12:02:59 +0900
+Subject: [PATCH 1/1] Remove Turbo
+
+Change-Id: I9884fb5d5d9c2572a5a62456eee9bb00b404cb3b
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ prebuilt/Android.mk | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/prebuilt/Android.mk b/prebuilt/Android.mk
+index 47d4232..5cf1843 100644
+--- a/prebuilt/Android.mk
++++ b/prebuilt/Android.mk
+@@ -27,12 +27,3 @@ LOCAL_PRIVILEGED_MODULE := true
+ LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+ include $(BUILD_PREBUILT)
+ 
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := Turbo
+-LOCAL_SRC_FILES := $(LOCAL_MODULE)/$(LOCAL_MODULE).apk
+-LOCAL_MODULE_CLASS := APPS
+-LOCAL_MODULE_TAGS := optional
+-LOCAL_CERTIFICATE := PRESIGNED
+-LOCAL_PRIVILEGED_MODULE := true
+-LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+-include $(BUILD_PREBUILT)
+-- 
+2.17.1
+
