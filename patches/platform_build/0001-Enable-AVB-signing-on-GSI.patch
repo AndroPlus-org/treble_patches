@@ -1,0 +1,151 @@
+From 306ff751cd6413bc190929b931982f863f577f1a Mon Sep 17 00:00:00 2001
+From: Bowgo Tsai <bowgotsai@google.com>
+Date: Sat, 26 Jan 2019 17:00:42 +0900
+Subject: [PATCH 1/1] Enable AVB signing on GSI
+
+In current GSI builds, AVB signing is not allowed.
+We should allow signing GSI image, while building a vbmeta.img with
+AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED (flag 2).
+
+When need to disable AVB, use the vbmeta.img above together with the
+GSI. When need enable AVB on GSI, include the GSI public key into the
+device-specific vbmeta.img. Note that GSI is a chain partition so the
+keys used to sign GSI and vbmeta.img are different.
+
+Bug: 112293933
+Test: build aosp_arm64-userdebug, checks flag 2 is set in vbmeta.img
+      and there is AVB HASHTREE in system.img
+      `avbtool info_image --image $OUT/system.img`
+      `avbtool info_image --image $OUT/vbmeta.img`
+
+Change-Id: If1eff317621882994e7dcbf37cd35f5bfa16b69a
+Merged-In: If1eff317621882994e7dcbf37cd35f5bfa16b69a
+(cherry picked from commit 9d28638cfcac11b3955873674ba119d4d0c995b7)
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ core/Makefile                        | 16 ----------------
+ target/board/BoardConfigEmuCommon.mk |  5 +++--
+ target/board/BoardConfigGsiCommon.mk | 24 ++++++++++++++++--------
+ target/board/treble_common.mk        | 24 ++++++++++++++++--------
+ 4 files changed, 35 insertions(+), 34 deletions(-)
+
+diff --git a/core/Makefile b/core/Makefile
+index fa7cb630c..9f9a9f0c8 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -2427,14 +2427,6 @@ $(INSTALLED_VBMETAIMAGE_TARGET): \
+ vbmetaimage-nodeps:
+ 	$(build-vbmetaimage-target)
+ 
+-else ifeq (true,$(BOARD_BUILD_DISABLED_VBMETAIMAGE))
+-BUILT_DISABLED_VBMETAIMAGE := $(PRODUCT_OUT)/vbmeta.img
+-
+-INSTALLED_VBMETAIMAGE_TARGET := $(BUILT_DISABLED_VBMETAIMAGE)
+-$(INSTALLED_VBMETAIMAGE_TARGET): $(AVBTOOL)
+-	$(hide) $(AVBTOOL) make_vbmeta_image \
+-	  --flag 2 --padding_size 4096 --output $@
+-
+ else ifdef BOARD_PREBUILT_VBMETAIMAGE
+ INSTALLED_VBMETAIMAGE_TARGET := $(PRODUCT_OUT)/vbmeta.img
+ $(eval $(call copy-one-file,$(BOARD_PREBUILT_VBMETAIMAGE),$(INSTALLED_VBMETAIMAGE_TARGET)))
+@@ -3060,14 +3052,6 @@ ifeq ($(BREAKPAD_GENERATE_SYMBOLS),true)
+ 	$(hide) $(ACP) -r $(TARGET_OUT_BREAKPAD) $(zip_root)/BREAKPAD
+ endif
+ 	$(hide) echo "ota_override_device=$(OTA_SCRIPT_OVERRIDE_DEVICE)" >> $(zip_root)/META/misc_info.txt
+-# BOARD_BUILD_DISABLED_VBMETAIMAGE is used to build a special vbmeta.img
+-# that disables AVB verification. The content is fixed and we can just copy
+-# it to $(zip_root)/IMAGES without passing some info into misc_info.txt for
+-# regeneration.
+-ifeq (true,$(BOARD_BUILD_DISABLED_VBMETAIMAGE))
+-	$(hide) mkdir -p $(zip_root)/IMAGES
+-	$(hide) cp $(INSTALLED_VBMETAIMAGE_TARGET) $(zip_root)/IMAGES/
+-endif
+ ifdef BOARD_PREBUILT_VBMETAIMAGE
+ 	$(hide) mkdir -p $(zip_root)/IMAGES
+ 	$(hide) cp $(INSTALLED_VBMETAIMAGE_TARGET) $(zip_root)/IMAGES/
+diff --git a/target/board/BoardConfigEmuCommon.mk b/target/board/BoardConfigEmuCommon.mk
+index e8a562a22..dc6864188 100644
+--- a/target/board/BoardConfigEmuCommon.mk
++++ b/target/board/BoardConfigEmuCommon.mk
+@@ -28,8 +28,9 @@ USE_OPENGL_RENDERER := true
+ TARGET_COPY_OUT_VENDOR := vendor
+ 
+ # ~100 MB vendor image. Please adjust system image / vendor image sizes
+-# when finalizing them.
+-BOARD_VENDORIMAGE_PARTITION_SIZE := 100000000
++# when finalizing them. The partition size needs to be a multiple of image
++# block size: 4096.
++BOARD_VENDORIMAGE_PARTITION_SIZE := 100003840
+ BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := ext4
+ BOARD_FLASH_BLOCK_SIZE := 512
+ DEVICE_MATRIX_FILE   := device/generic/goldfish/compatibility_matrix.xml
+diff --git a/target/board/BoardConfigGsiCommon.mk b/target/board/BoardConfigGsiCommon.mk
+index 47107a022..095d122ee 100644
+--- a/target/board/BoardConfigGsiCommon.mk
++++ b/target/board/BoardConfigGsiCommon.mk
+@@ -15,14 +15,22 @@ TARGET_USES_MKE2FS := true
+ BOARD_SYSTEMIMAGE_PARTITION_RESERVED_SIZE := 67108864
+ 
+ # Android Verified Boot (AVB):
+-#   Builds a special vbmeta.img that disables AVB verification.
+-#   Otherwise, AVB will prevent the device from booting the generic system.img.
+-#   Also checks that BOARD_AVB_ENABLE is not set, to prevent adding verity
+-#   metadata into system.img.
+-ifeq ($(BOARD_AVB_ENABLE),true)
+-$(error BOARD_AVB_ENABLE cannot be set for GSI)
+-endif
+-BOARD_BUILD_DISABLED_VBMETAIMAGE := true
++#   1) Sets BOARD_AVB_ENABLE to sign the GSI image.
++#   2) Sets AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED (--flag 2) in
++#      vbmeta.img to disable AVB verification.
++#
++# To disable AVB for GSI, use the vbmeta.img and the GSI together.
++# To enable AVB for GSI, include the GSI public key into the device-specific
++# vbmeta.img.
++BOARD_AVB_ENABLE := true
++BOARD_AVB_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
++BOARD_AVB_MAKE_VBMETA_IMAGE_ARGS += --flag 2
++
++# Enable chain partition for system.
++BOARD_AVB_SYSTEM_KEY_PATH := external/avb/test/data/testkey_rsa2048.pem
++BOARD_AVB_SYSTEM_ALGORITHM := SHA256_RSA2048
++BOARD_AVB_SYSTEM_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
++BOARD_AVB_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
+ 
+ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
+ # GSI is always userdebug and needs a couple of properties taking precedence
+diff --git a/target/board/treble_common.mk b/target/board/treble_common.mk
+index b2b950ed0..e001ccae6 100644
+--- a/target/board/treble_common.mk
++++ b/target/board/treble_common.mk
+@@ -54,11 +54,19 @@ NUM_FRAMEBUFFER_SURFACE_BUFFERS := 3
+ USE_XML_AUDIO_POLICY_CONF := 1
+ 
+ # Android Verified Boot (AVB):
+-#   Builds a special vbmeta.img that disables AVB verification.
+-#   Otherwise, AVB will prevent the device from booting the generic system.img.
+-#   Also checks that BOARD_AVB_ENABLE is not set, to prevent adding verity
+-#   metadata into system.img.
+-ifeq ($(BOARD_AVB_ENABLE),true)
+-$(error BOARD_AVB_ENABLE cannot be set for Treble GSI)
+-endif
+-BOARD_BUILD_DISABLED_VBMETAIMAGE := true
++#   1) Sets BOARD_AVB_ENABLE to sign the GSI image.
++#   2) Sets AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED (--flag 2) in
++#      vbmeta.img to disable AVB verification.
++#
++# To disable AVB for GSI, use the vbmeta.img and the GSI together.
++# To enable AVB for GSI, include the GSI public key into the device-specific
++# vbmeta.img.
++BOARD_AVB_ENABLE := true
++BOARD_AVB_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
++BOARD_AVB_MAKE_VBMETA_IMAGE_ARGS += --flag 2
++
++# Enable chain partition for system.
++BOARD_AVB_SYSTEM_KEY_PATH := external/avb/test/data/testkey_rsa2048.pem
++BOARD_AVB_SYSTEM_ALGORITHM := SHA256_RSA2048
++BOARD_AVB_SYSTEM_ROLLBACK_INDEX := $(PLATFORM_SECURITY_PATCH_TIMESTAMP)
++BOARD_AVB_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
+-- 
+2.17.1
+
