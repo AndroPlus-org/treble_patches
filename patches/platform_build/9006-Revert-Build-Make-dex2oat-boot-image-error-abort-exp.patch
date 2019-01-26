@@ -1,0 +1,29 @@
+From 5aa1db96d818346a755ca3863fac7479c962d9a5 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 26 Jan 2019 18:58:51 +0900
+Subject: [PATCH 1/1] Revert "Build: Make dex2oat boot image error abort
+ explicit"
+
+This reverts commit 5ccf0900d0d0c568a5c58ab9ffd9e6349e845c52.
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ core/dex_preopt_libart_boot.mk | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/core/dex_preopt_libart_boot.mk b/core/dex_preopt_libart_boot.mk
+index a5e7e881a..3647272da 100644
+--- a/core/dex_preopt_libart_boot.mk
++++ b/core/dex_preopt_libart_boot.mk
+@@ -118,8 +118,6 @@ $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME) : $(LIBART_TARGE
+ 		--runtime-arg -Xnorelocate --compile-pic \
+ 		--no-generate-debug-info --generate-build-id \
+ 		--multi-image --no-inline-from=core-oj.jar \
+-		--abort-on-hard-verifier-error \
+-		--abort-on-soft-verifier-error \
+ 		$(PRODUCT_DEX_PREOPT_BOOT_FLAGS) $(GLOBAL_DEXPREOPT_FLAGS) $(ART_BOOT_IMAGE_EXTRA_ARGS) \
+ 		|| ( echo "$(DEX2OAT_FAILURE_MESSAGE)" ; false ) && \
+ 	$(DEX2OAT_BOOT_IMAGE_LOG_TAGS) ANDROID_ROOT=$(PRODUCT_OUT)/system ANDROID_DATA=$(dir $@) $(PATCHOAT) \
+-- 
+2.17.1
+

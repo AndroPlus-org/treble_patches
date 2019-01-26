@@ -1,0 +1,88 @@
+From 7d79045c4b55d2d3be79b1e01cb7edc67f7f8f7b Mon Sep 17 00:00:00 2001
+From: Andreas Gampe <agampe@google.com>
+Date: Sat, 26 Jan 2019 19:20:55 +0900
+Subject: [PATCH 1/1] Revert "Build: Support for compiled-classes file"
+
+This reverts commit 96a522037ff7079cbf48625c3cfb5ec49b7e6db6.
+
+Bug: 76145463
+Test: m
+Change-Id: I5a368cd01812e16869352ec219eae095df4919c4
+Signed-off-by: mydongistiny <jaysonedson@gmail.com>
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ core/dex_preopt_libart.mk      |  4 ----
+ core/dex_preopt_libart_boot.mk | 11 ++---------
+ target/product/base.mk         |  5 -----
+ 3 files changed, 2 insertions(+), 18 deletions(-)
+
+diff --git a/core/dex_preopt_libart.mk b/core/dex_preopt_libart.mk
+index 9c4d55de7..45ec6ee30 100644
+--- a/core/dex_preopt_libart.mk
++++ b/core/dex_preopt_libart.mk
+@@ -20,10 +20,6 @@ PATCHOAT_DEPENDENCY += $(PATCHOAT)
+ PRELOADED_CLASSES := $(call word-colon,1,$(firstword \
+     $(filter %system/etc/preloaded-classes,$(PRODUCT_COPY_FILES))))
+ 
+-# Use the first compiled-classes file in PRODUCT_COPY_FILES.
+-COMPILED_CLASSES := $(call word-colon,1,$(firstword \
+-    $(filter %system/etc/compiled-classes,$(PRODUCT_COPY_FILES))))
+-
+ # Use the first dirty-image-objects file in PRODUCT_COPY_FILES.
+ DIRTY_IMAGE_OBJECTS := $(call word-colon,1,$(firstword \
+     $(filter %system/etc/dirty-image-objects,$(PRODUCT_COPY_FILES))))
+diff --git a/core/dex_preopt_libart_boot.mk b/core/dex_preopt_libart_boot.mk
+index a5e7e881a..29584b1f1 100644
+--- a/core/dex_preopt_libart_boot.mk
++++ b/core/dex_preopt_libart_boot.mk
+@@ -33,12 +33,6 @@ $(my_2nd_arch_prefix)LIBART_TARGET_BOOT_ART_EXTRA_INSTALLED_FILES := $(addprefix
+ $(my_2nd_arch_prefix)LIBART_TARGET_BOOT_ART_VDEX_INSTALLED_FILES := $(addprefix $(dir $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_INSTALLED_IMAGE)),\
+     $(LIBART_TARGET_BOOT_ART_VDEX_FILES))
+ 
+-# If we have a compiled-classes file, create a parameter.
+-COMPILED_CLASSES_FLAGS :=
+-ifneq ($(COMPILED_CLASSES),)
+-  COMPILED_CLASSES_FLAGS := --compiled-classes=$(COMPILED_CLASSES)
+-endif
+-
+ # If we have a dirty-image-objects file, create a parameter.
+ DIRTY_IMAGE_OBJECTS_FLAGS :=
+ ifneq ($(DIRTY_IMAGE_OBJECTS),)
+@@ -59,8 +53,7 @@ $($(my_2nd_arch_prefix)LIBART_TARGET_BOOT_ART_EXTRA_INSTALLED_FILES) : $($(my_2n
+ 	$(hide) $(ACP) -fp $(dir $<)$(notdir $@) $@
+ 
+ ifeq (,$(my_out_boot_image_profile_location))
+-my_boot_image_flags := $(COMPILED_CLASSES_FLAGS)
+-my_boot_image_flags += --image-classes=$(PRELOADED_CLASSES)
++my_boot_image_flags := --image-classes=$(PRELOADED_CLASSES)
+ my_boot_image_flags += $(DIRTY_IMAGE_OBJECTS_FLAGS)
+ else
+ my_boot_image_flags := --compiler-filter=speed-profile
+@@ -94,7 +87,7 @@ $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME): PRIVATE_BOOT_IM
+ $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME): PRIVATE_2ND_ARCH_VAR_PREFIX := $(my_2nd_arch_prefix)
+ $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME): PRIVATE_IMAGE_LOCATION := $($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_LOCATION)
+ # Use dex2oat debug version for better error reporting
+-$($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME) : $(LIBART_TARGET_BOOT_DEX_FILES) $(PRELOADED_CLASSES) $(COMPILED_CLASSES) $(DIRTY_IMAGE_OBJECTS) $(DEX2OAT_DEPENDENCY) $(PATCHOAT_DEPENDENCY) $(my_out_boot_image_profile_location)
++$($(my_2nd_arch_prefix)DEFAULT_DEX_PREOPT_BUILT_IMAGE_FILENAME) : $(LIBART_TARGET_BOOT_DEX_FILES) $(PRELOADED_CLASSES) $(DIRTY_IMAGE_OBJECTS) $(DEX2OAT_DEPENDENCY) $(PATCHOAT_DEPENDENCY) $(my_out_boot_image_profile_location)
+ 	@echo "target dex2oat: $@"
+ 	@mkdir -p $(dir $@)
+ 	@mkdir -p $(dir $($(PRIVATE_2ND_ARCH_VAR_PREFIX)LIBART_TARGET_BOOT_OAT_UNSTRIPPED))
+diff --git a/target/product/base.mk b/target/product/base.mk
+index bc3710c61..82d705b4a 100644
+--- a/target/product/base.mk
++++ b/target/product/base.mk
+@@ -175,11 +175,6 @@ PRODUCT_PACKAGES_DEBUG := \
+ PRODUCT_COPY_FILES := $(call add-to-product-copy-files-if-exists,\
+     frameworks/base/config/preloaded-classes:system/etc/preloaded-classes)
+ 
+-# Note: it is acceptable to not have a compiled-classes file. In that case, all boot classpath
+-#       classes will be compiled.
+-PRODUCT_COPY_FILES += $(call add-to-product-copy-files-if-exists,\
+-    frameworks/base/config/compiled-classes:system/etc/compiled-classes)
+-
+ # Note: it is acceptable to not have a dirty-image-objects file. In that case, the special bin
+ #       for known dirty objects in the image will be empty.
+ PRODUCT_COPY_FILES += $(call add-to-product-copy-files-if-exists,\
+-- 
+2.17.1
+
