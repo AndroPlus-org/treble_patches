@@ -1,0 +1,98 @@
+From 760dbddfdbea409f82865c92e5299c7df8af2fba Mon Sep 17 00:00:00 2001
+From: Tao Bao <tbao@google.com>
+Date: Mon, 23 Jul 2018 13:05:00 -0700
+Subject: [PATCH 1/1] releasetools: Return the actual image size when building
+ logical partitions.
+
+When verity is enabled, `partition_size` has the "adjusted" partition
+size for holding the filesystem files (i.e. excluding verity hashtree,
+and FEC metadata if applicable), whereas `original_partition_size` has
+the one for the actual image returned by build_image.py.
+`partition_size` must be smaller than `original_partition_size`. As a
+result, the later assertion in Makefile (e.g. assert-max-image-size) may
+fail to hold when using `partition_size`.
+
+This CL addresses the issue by returning the value in
+`original_partition_size` instead, if available. It also changes to
+include both values when dumping the size info on image creation
+failure.
+
+Fixes: 79106666
+Test: `m dist` with aosp_walleye-userdebug
+Test: Set up walleye to use logical partitions, with a reserved size of
+      20MiB. `m systemimage` no longer fails.
+Test: Set up walleye that doesn't use verified boot. Use `m systemimage`
+      to build an oversized image. Check the error message.
+Change-Id: I41d77bffa85e8eadfbf4a2a7dcd2e798fadfdab7
+Merged-In: I41d77bffa85e8eadfbf4a2a7dcd2e798fadfdab7
+(cherry picked from commit 4251fe97aaab2be1cf84afdf8b0398a98862e265)
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ tools/releasetools/build_image.py | 40 +++++++++++++++++++++----------
+ 1 file changed, 28 insertions(+), 12 deletions(-)
+
+diff --git a/tools/releasetools/build_image.py b/tools/releasetools/build_image.py
+index a97a75cf0..04daf001f 100755
+--- a/tools/releasetools/build_image.py
++++ b/tools/releasetools/build_image.py
+@@ -666,14 +666,24 @@ def BuildImage(in_dir, prop_dict, out_file, target_out=None):
+     success, du = GetDiskUsage(origin_in)
+     du_str = ("%d bytes (%d MB)" % (du, du // BYTES_IN_MB)
+              ) if success else "unknown"
+-    print("Out of space? The tree size of %s is %s.\n" % (
+-        origin_in, du_str))
+-    print("The max is %d bytes (%d MB).\n" % (
+-        int(prop_dict["partition_size"]),
+-        int(prop_dict["partition_size"]) // BYTES_IN_MB))
+-    print("Reserved space is %d bytes (%d MB).\n" % (
+-        int(prop_dict.get("partition_reserved_size", 0)),
+-        int(prop_dict.get("partition_reserved_size", 0)) // BYTES_IN_MB))
++    print(
++        "Out of space? The tree size of {} is {}, with reserved space of {} "
++        "bytes ({} MB).".format(
++            origin_in, du_str,
++            int(prop_dict.get("partition_reserved_size", 0)),
++            int(prop_dict.get("partition_reserved_size", 0)) // BYTES_IN_MB))
++    if "original_partition_size" in prop_dict:
++      print(
++          "The max size for filsystem files is {} bytes ({} MB), out of a "
++          "total image size of {} bytes ({} MB).".format(
++              int(prop_dict["partition_size"]),
++              int(prop_dict["partition_size"]) // BYTES_IN_MB,
++              int(prop_dict["original_partition_size"]),
++              int(prop_dict["original_partition_size"]) // BYTES_IN_MB))
++    else:
++      print("The max image size is {} bytes ({} MB).".format(
++          int(prop_dict["partition_size"]),
++          int(prop_dict["partition_size"]) // BYTES_IN_MB))
+     return False
+ 
+   # Check if there's enough headroom space available for ext4 image.
+@@ -916,14 +926,20 @@ def GlobalDictFromImageProp(image_prop, mount_point):
+       d[dest_p] = image_prop[src_p]
+       return True
+     return False
++
++  if "original_partition_size" in image_prop:
++    size_property = "original_partition_size"
++  else:
++    size_property = "partition_size"
++
+   if mount_point == "system":
+-    copy_prop("partition_size", "system_size")
++    copy_prop(size_property, "system_size")
+   elif mount_point == "system_other":
+-    copy_prop("partition_size", "system_size")
++    copy_prop(size_property, "system_size")
+   elif mount_point == "vendor":
+-    copy_prop("partition_size", "vendor_size")
++    copy_prop(size_property, "vendor_size")
+   elif mount_point == "product":
+-    copy_prop("partition_size", "product_size")
++    copy_prop(size_property, "product_size")
+   return d
+ 
+ 
+-- 
+2.17.1
+
