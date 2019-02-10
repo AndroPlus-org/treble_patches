@@ -1,0 +1,32 @@
+From 9157d651a171f84ceb1eb393927f5207254ba71d Mon Sep 17 00:00:00 2001
+From: Alex Naidis <alex.naidis@linux.com>
+Date: Mon, 26 Sep 2016 19:38:30 +0200
+Subject: [PATCH 1/1] core: main: never enable checkjni
+
+* We are not using this
+* This causes a negative performance impact on userdebug builds
+  which we are using for development.
+
+Change-Id: Icf83cd7e43fadf4399780f6a54d02dbbb550b507
+Signed-off-by: Alex Naidis <alex.naidis@linux.com>
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ core/main.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/core/main.mk b/core/main.mk
+index 8265afeae..62783381e 100644
+--- a/core/main.mk
++++ b/core/main.mk
+@@ -303,7 +303,7 @@ ifneq (,$(user_variant))
+ 
+ else # !user_variant
+   # Turn on checkjni for non-user builds.
+-  ADDITIONAL_BUILD_PROPERTIES += ro.kernel.android.checkjni=1
++  #ADDITIONAL_BUILD_PROPERTIES += ro.kernel.android.checkjni=1
+   # Set device insecure for non-user builds.
+   ADDITIONAL_DEFAULT_PROPERTIES += ro.secure=0
+   # Allow mock locations by default for non user builds
+-- 
+2.17.1
+
