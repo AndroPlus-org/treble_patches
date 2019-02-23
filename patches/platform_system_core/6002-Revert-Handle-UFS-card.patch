@@ -1,0 +1,39 @@
+From aa91ca65d86a2f6c9cfc9e098ee1223e5ea00231 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 23 Feb 2019 20:30:57 +0900
+Subject: [PATCH 1/1] Revert "Handle UFS card"
+
+This reverts commit b527db6fd067dbdfd30ca20a0624f0090c103b1b.
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ libdiskconfig/diskconfig.c | 10 ++--------
+ 1 file changed, 2 insertions(+), 8 deletions(-)
+
+diff --git a/libdiskconfig/diskconfig.c b/libdiskconfig/diskconfig.c
+index 236f79b08..c7e1b4374 100644
+--- a/libdiskconfig/diskconfig.c
++++ b/libdiskconfig/diskconfig.c
+@@ -302,17 +302,11 @@ validate(struct disk_info *dinfo)
+             goto fail;
+         }
+ 
+-        if (!sect_sz) {
+-            ALOGE("Device sector size is zero!");
++        if (!sect_sz || sect_sz != dinfo->sect_size) {
++            ALOGE("Device sector size is zero or sector sizes do not match!");
+             goto fail;
+         }
+ 
+-        if ((sect_sz != 512) && (sect_sz != 4096)) {
+-            ALOGE("Device sector size %d is not supported", sect_sz);
+-            goto fail;
+-        }
+-        dinfo->sect_size = sect_sz;
+-
+         /* allow the user override the "disk size" if they provided num_lba */
+         if (!dinfo->num_lba) {
+             if (ioctl(fd, BLKGETSIZE64, &disk_size) < 0) {
+-- 
+2.17.1
+
