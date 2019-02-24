@@ -1,0 +1,27 @@
+From 735fae8e184bf2fbba698df1ef2d5108d64ce917 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sun, 24 Feb 2019 13:13:35 +0900
+Subject: [PATCH 1/1] build: Add support for Phh-Treble
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ envsetup.sh | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/envsetup.sh b/envsetup.sh
+index 197163a0c..bb653568d 100644
+--- a/envsetup.sh
++++ b/envsetup.sh
+@@ -78,6 +78,9 @@ function check_product()
+     if (echo -n $1 | grep -q -e "^aicp_") ; then
+         AICP_BUILD=$(echo -n $1 | sed -e 's/^aicp_//g')
+         export BUILD_NUMBER=$( (date +%s%N ; echo $AICP_BUILD; hostname) | openssl sha1 | sed -e 's/.*=//g; s/ //g' | cut -c1-10 )
++    elif (echo -n $1 | grep -q -e "^treble_") ; then
++        AICP_BUILD=$(echo -n $1 | sed -e 's/^treble_//g')
++        export BUILD_NUMBER=$( (date +%s%N ; echo $AICP_BUILD; hostname) | openssl sha1 | sed -e 's/.*=//g; s/ //g' | cut -c1-10 )
+     else
+         AICP_BUILD=
+     fi
+-- 
+2.17.1
+
