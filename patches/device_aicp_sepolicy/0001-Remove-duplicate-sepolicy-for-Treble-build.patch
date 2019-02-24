@@ -1,0 +1,37 @@
+From 353c5d465a528822bf5db6635f6a4647bed9206d Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sun, 24 Feb 2019 13:55:39 +0900
+Subject: [PATCH 1/1] Remove duplicate sepolicy for Treble build
+
+Change-Id: Ic7302d1da18af9e57bd1f28008604f396ef8f0bf
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ common/private/file_contexts  | 2 --
+ common/private/genfs_contexts | 4 ----
+ 2 files changed, 6 deletions(-)
+ delete mode 100644 common/private/genfs_contexts
+
+diff --git a/common/private/file_contexts b/common/private/file_contexts
+index 9f0b6a3..ea2c8d0 100644
+--- a/common/private/file_contexts
++++ b/common/private/file_contexts
+@@ -1,6 +1,4 @@
+ # Filesystem tools
+-/system/bin/fsck\.exfat                 u:object_r:fsck_exec:s0
+-/system/bin/fsck\.ntfs                  u:object_r:fsck_exec:s0
+ /system/bin/mkfs\.exfat                 u:object_r:mkfs_exec:s0
+ /system/bin/mkfs\.f2fs                  u:object_r:mkfs_exec:s0
+ /system/bin/mkfs\.ntfs                  u:object_r:mkfs_exec:s0
+diff --git a/common/private/genfs_contexts b/common/private/genfs_contexts
+deleted file mode 100644
+index 97887b9..0000000
+--- a/common/private/genfs_contexts
++++ /dev/null
+@@ -1,4 +0,0 @@
+-genfscon fuseblk / u:object_r:vfat:s0
+-genfscon sdfat / u:object_r:exfat:s0
+-
+-genfscon sysfs /devices/virtual/timed_output/vibrator u:object_r:sysfs_vibrator:s0
+-- 
+2.17.1
+
