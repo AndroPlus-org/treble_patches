@@ -1,0 +1,67 @@
+From 9af8e50fccdb3d123fb0652fa2be17b98b528c30 Mon Sep 17 00:00:00 2001
+From: LuK1337 <priv.luk@gmail.com>
+Date: Sat, 2 Feb 2019 12:48:21 +0900
+Subject: [PATCH 1/1] build: Support system-as-root A-only backuptool
+
+Change-Id: Ia24ae288a48721f724bfebadfe023330c4932633
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ tools/releasetools/edify_generator.py       |  5 +++--
+ tools/releasetools/ota_from_target_files.py | 14 ++++++++++++--
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/tools/releasetools/edify_generator.py b/tools/releasetools/edify_generator.py
+index 59f9d8831..30ff3e5d3 100644
+--- a/tools/releasetools/edify_generator.py
++++ b/tools/releasetools/edify_generator.py
+@@ -164,8 +164,9 @@ class EdifyGenerator(object):
+            ");")
+     self.script.append(self.WordWrap(cmd))
+ 
+-  def RunBackup(self, command):
+-    self.script.append(('run_program("/tmp/install/bin/backuptool.sh", "%s");' % command))
++  def RunBackup(self, command, system_path):
++    self.script.append(('run_program("/tmp/install/bin/backuptool.sh", "%s", "%s");' % (
++        command, system_path)))
+ 
+   def ShowProgress(self, frac, dur):
+     """Update the progress bar, advancing it over 'frac' over the next
+diff --git a/tools/releasetools/ota_from_target_files.py b/tools/releasetools/ota_from_target_files.py
+index f6ab8f118..c84ded6ba 100755
+--- a/tools/releasetools/ota_from_target_files.py
++++ b/tools/releasetools/ota_from_target_files.py
+@@ -851,9 +851,14 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
+   script.SetPermissionsRecursive("/tmp/install/bin", 0, 0, 0755, 0755, None, None)
+ 
+   if OPTIONS.backuptool:
++    is_system_as_root = script.fstab["/system"].mount_point == "/"
++    if is_system_as_root:
++      script.fstab["/system"].mount_point = "/system"
+     script.Mount("/system")
+-    script.RunBackup("backup")
++    script.RunBackup("backup", "/system/system" if is_system_as_root else "/system")
+     script.Unmount("/system")
++    if is_system_as_root:
++      script.fstab["/system"].mount_point = "/"
+ 
+   system_progress = 0.75
+ 
+@@ -928,9 +933,14 @@ else if get_stage("%(bcb_dev)s") == "3/3" then
+ 
+   if OPTIONS.backuptool:
+     script.ShowProgress(0.02, 10)
++    is_system_as_root = script.fstab["/system"].mount_point == "/"
++    if is_system_as_root:
++      script.fstab["/system"].mount_point = "/system"
+     script.Mount("/system")
+-    script.RunBackup("restore")
++    script.RunBackup("restore", "/system/system" if is_system_as_root else "/system")
+     script.Unmount("/system")
++    if is_system_as_root:
++      script.fstab["/system"].mount_point = "/"
+ 
+   script.ShowProgress(0.05, 5)
+   script.WriteRawImage("/boot", "boot.img")
+-- 
+2.17.1
+
