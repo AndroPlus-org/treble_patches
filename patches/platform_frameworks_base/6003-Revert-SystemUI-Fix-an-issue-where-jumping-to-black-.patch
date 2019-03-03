@@ -1,0 +1,43 @@
+From d7b3ae9dabb4b64a8ce5b6d2514bc1999f21dbd4 Mon Sep 17 00:00:00 2001
+From: sileshn <sileshn@gerrit.aospextended.com>
+Date: Thu, 14 Feb 2019 15:29:26 +0100
+Subject: [PATCH 1/1] Revert "SystemUI: Fix an issue where jumping to black
+ after screen turned on"
+
+This reverts commit c8f3d971d279eeacbb69e113173d724f6ccaf9cf.
+
+This breaks ambient notifications as well as handwave/pickup pulse notifications.
+
+Change-Id: I349820b6a2dd0cbd37f5e3f79e333e456c300e97
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ .../src/com/android/systemui/statusbar/phone/StatusBar.java | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+index e8798401a3d..0d13b270967 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java
+@@ -5429,7 +5429,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+ 
+         @Override
+         public void startDozing() {
+-             if (!mDozingRequested && !isScreenTurningOnOrOn()) {
++            if (!mDozingRequested) {
+                 mDozingRequested = true;
+                 DozeLog.traceDozing(mContext, mDozing);
+                 updateDozing();
+@@ -5490,9 +5490,7 @@ public class StatusBar extends SystemUI implements DemoMode, TunerService.Tunabl
+                 DozeLog.traceDozing(mContext, mDozing);
+                 mWakefulnessLifecycle.dispatchStartedWakingUp();
+                 updateDozing();
+-
+-                updateScrimController();
+-           }
++            }
+         }
+ 
+         @Override
+-- 
+2.17.1
+
