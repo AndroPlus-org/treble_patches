@@ -1,0 +1,28 @@
+From 14ad48caa9e8b60df17708b591d63c113621bff1 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 16 Mar 2019 11:27:53 +0900
+Subject: [PATCH 1/1] Revert "tinycompress: Use generated kernel headers"
+
+This reverts commit fbe2bd5c3d670234c3c92f875986acc148e6d792.
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ Android.bp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Android.bp b/Android.bp
+index e79b204..f0000f1 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -18,7 +18,7 @@ cc_library_shared {
+         "libutils",
+     ],
+     header_libs: [
+-        "generated_kernel_headers",
++        "device_kernel_headers",
+     ],
+ }
+ 
+-- 
+2.17.1
+

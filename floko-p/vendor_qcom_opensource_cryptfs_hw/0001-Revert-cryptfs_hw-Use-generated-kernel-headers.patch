@@ -1,0 +1,28 @@
+From ff89297b6ec1dbb7ae0b50a9031cabd445f29d37 Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 16 Mar 2019 11:27:54 +0900
+Subject: [PATCH 1/1] Revert "cryptfs_hw: Use generated kernel headers"
+
+This reverts commit 6a3fc11bcc95d1abebb60e5d714adf75ece83102.
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ Android.bp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Android.bp b/Android.bp
+index ea6cbb0..abbe407 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -10,7 +10,7 @@ commonSharedLibraries = [
+ 
+ cc_library_shared {
+     name: "libcryptfs_hw",
+-    header_libs: ["generated_kernel_headers",
++    header_libs: ["qseecom-kernel-headers",
+                   "libhardware_headers"],
+     cflags: ["-DCONFIG_HW_DISK_ENCRYPTION"],
+     srcs: sourceFiles,
+-- 
+2.17.1
+
