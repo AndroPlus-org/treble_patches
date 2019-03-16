@@ -1,0 +1,34 @@
+From 989b27002bf0460938ff0b373f47e0043a9c6bbe Mon Sep 17 00:00:00 2001
+From: AndroPlus <mail@andro.plus>
+Date: Sat, 16 Mar 2019 09:24:05 +0900
+Subject: [PATCH 1/1] Remove turbo
+
+Signed-off-by: AndroPlus <mail@andro.plus>
+---
+ prebuilt/system/priv-app/Android.mk | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/prebuilt/system/priv-app/Android.mk b/prebuilt/system/priv-app/Android.mk
+index c5532c1..835576b 100644
+--- a/prebuilt/system/priv-app/Android.mk
++++ b/prebuilt/system/priv-app/Android.mk
+@@ -13,16 +13,6 @@
+ # limitations under the License.
+ LOCAL_PATH := $(call my-dir)
+ 
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := Turbo
+-LOCAL_SRC_FILES := Turbo.apk
+-LOCAL_MODULE_CLASS := APPS
+-LOCAL_MODULE_TAGS := optional
+-LOCAL_CERTIFICATE := PRESIGNED
+-LOCAL_MODULE_PATH  := $(TARGET_OUT_APPS_PRIVILEGED)
+-LOCAL_DEX_PREOPT := false
+-include $(BUILD_PREBUILT)
+-
+ include $(CLEAR_VARS)
+ LOCAL_MODULE := AdAway
+ LOCAL_SRC_FILES := AdAway.apk
+-- 
+2.17.1
+
