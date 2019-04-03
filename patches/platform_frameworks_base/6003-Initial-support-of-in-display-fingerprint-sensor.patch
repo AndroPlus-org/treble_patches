@@ -1,7 +1,7 @@
-From 64b2e6d1fc378ac13783f5002e5a9d9379e75f3b Mon Sep 17 00:00:00 2001
+From 3a1048478c9e142020d877559ce2bbcc5978f069 Mon Sep 17 00:00:00 2001
 From: Pierre-Hugues Husson <phh@phh.me>
-Date: Sun, 24 Mar 2019 22:48:39 +0100
-Subject: [PATCH] Initial support of in-display fingerprint sensor
+Date: Wed, 3 Apr 2019 20:02:28 +0900
+Subject: [PATCH 1/1] Initial support of in-display fingerprint sensor
 
 Tested on Mi 9.
 Here are the list of things that are device-specific:
@@ -9,6 +9,8 @@ Here are the list of things that are device-specific:
 - how to get position and size of green circle?
 - fingerprint control (tell the fingerprint sensor the green circle is
 ready, and what is its brightness)
+
+Signed-off-by: AndroPlus <mail@andro.plus>
 ---
  services/core/Android.bp                      |   1 +
  .../fingerprint/AuthenticationClient.java     |   6 +
@@ -18,13 +20,13 @@ ready, and what is its brightness)
  create mode 100644 services/core/java/com/android/server/fingerprint/FacolaView.java
 
 diff --git a/services/core/Android.bp b/services/core/Android.bp
-index 8da6d1e48ff..affa0b81a66 100644
+index d0c979a1c1b..01f6d18f4fd 100644
 --- a/services/core/Android.bp
 +++ b/services/core/Android.bp
-@@ -43,6 +43,7 @@ java_library_static {
-         "android.hardware.vibrator-V1.0-java",
+@@ -46,6 +46,7 @@ java_library_static {
          "android.hardware.configstore-V1.0-java",
          "android.hardware.contexthub-V1.0-java",
+         "vendor.lineage.trust-V1.0-java",
 +        "vendor.xiaomi.hardware.fingerprintextension-V1.0-java",
      ],
  }
@@ -33,7 +35,7 @@ diff --git a/services/core/java/com/android/server/fingerprint/AuthenticationCli
 index afd1a94bf50..f36ed9b38c6 100644
 --- a/services/core/java/com/android/server/fingerprint/AuthenticationClient.java
 +++ b/services/core/java/com/android/server/fingerprint/AuthenticationClient.java
-@@ -54,6 +54,8 @@
+@@ -54,6 +54,8 @@ public abstract class AuthenticationClient extends ClientMonitor {
      private final FingerprintManager mFingerprintManager;
      protected boolean mDialogDismissed;
  
@@ -42,7 +44,7 @@ index afd1a94bf50..f36ed9b38c6 100644
      // Receives events from SystemUI and handles them before forwarding them to FingerprintDialog
      protected IBiometricPromptReceiver mDialogReceiver = new IBiometricPromptReceiver.Stub() {
          @Override // binder call
-@@ -96,6 +98,7 @@ public AuthenticationClient(Context context, long halDeviceId, IBinder token,
+@@ -96,6 +98,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
          mStatusBarService = statusBarService;
          mFingerprintManager = (FingerprintManager) getContext()
                  .getSystemService(Context.FINGERPRINT_SERVICE);
@@ -50,7 +52,7 @@ index afd1a94bf50..f36ed9b38c6 100644
      }
  
      @Override
-@@ -233,6 +236,7 @@ public boolean onAuthenticated(int fingerId, int groupId) {
+@@ -233,6 +236,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
              resetFailedAttempts();
              onStop();
          }
@@ -58,7 +60,7 @@ index afd1a94bf50..f36ed9b38c6 100644
          return result;
      }
  
-@@ -246,6 +250,7 @@ public int start() {
+@@ -246,6 +250,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
              Slog.w(TAG, "start authentication: no fingerprint HAL!");
              return ERROR_ESRCH;
          }
@@ -66,7 +68,7 @@ index afd1a94bf50..f36ed9b38c6 100644
          onStart();
          try {
              final int result = daemon.authenticate(mOpId, getGroupId());
-@@ -279,6 +284,7 @@ public int stop(boolean initiatedByClient) {
+@@ -279,6 +284,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
              return 0;
          }
  
@@ -78,7 +80,7 @@ diff --git a/services/core/java/com/android/server/fingerprint/EnrollClient.java
 index c9efcf2fd68..4ce4ba0cfc8 100644
 --- a/services/core/java/com/android/server/fingerprint/EnrollClient.java
 +++ b/services/core/java/com/android/server/fingerprint/EnrollClient.java
-@@ -29,10 +29,12 @@
+@@ -29,10 +29,12 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
  
  import java.util.Arrays;
  
@@ -91,7 +93,7 @@ index c9efcf2fd68..4ce4ba0cfc8 100644
      private static final long MS_PER_SEC = 1000;
      private static final int ENROLLMENT_TIMEOUT_MS = 60 * 1000; // 1 minute
      private byte[] mCryptoToken;
-@@ -42,6 +44,7 @@ public EnrollClient(Context context, long halDeviceId, IBinder token,
+@@ -42,6 +44,7 @@ public abstract class EnrollClient extends ClientMonitor {
              boolean restricted, String owner) {
          super(context, halDeviceId, token, receiver, userId, groupId, restricted, owner);
          mCryptoToken = Arrays.copyOf(cryptoToken, cryptoToken.length);
@@ -99,7 +101,7 @@ index c9efcf2fd68..4ce4ba0cfc8 100644
      }
  
      @Override
-@@ -69,6 +72,7 @@ private boolean sendEnrollResult(int fpId, int groupId, int remaining) {
+@@ -69,6 +72,7 @@ public abstract class EnrollClient extends ClientMonitor {
          MetricsLogger.action(getContext(), MetricsEvent.ACTION_FINGERPRINT_ENROLL);
          try {
              receiver.onEnrollResult(getHalDeviceId(), fpId, groupId, remaining);
@@ -107,7 +109,7 @@ index c9efcf2fd68..4ce4ba0cfc8 100644
              return remaining == 0;
          } catch (RemoteException e) {
              Slog.w(TAG, "Failed to notify EnrollResult:", e);
-@@ -83,6 +87,10 @@ public int start() {
+@@ -83,6 +87,10 @@ public abstract class EnrollClient extends ClientMonitor {
              Slog.w(TAG, "enroll: no fingerprint HAL!");
              return ERROR_ESRCH;
          }
@@ -118,7 +120,7 @@ index c9efcf2fd68..4ce4ba0cfc8 100644
          final int timeout = (int) (ENROLLMENT_TIMEOUT_MS / MS_PER_SEC);
          try {
              final int result = daemon.enroll(mCryptoToken, getGroupId(), timeout);
-@@ -104,6 +112,7 @@ public int stop(boolean initiatedByClient) {
+@@ -104,6 +112,7 @@ public abstract class EnrollClient extends ClientMonitor {
              Slog.w(TAG, "stopEnroll: already cancelled!");
              return 0;
          }
@@ -324,3 +326,6 @@ index 00000000000..ec336fe337c
 +        mWM.removeView(this);
 +    }
 +}
+-- 
+2.17.1
+
