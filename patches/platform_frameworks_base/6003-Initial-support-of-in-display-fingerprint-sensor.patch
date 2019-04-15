@@ -239,7 +239,7 @@ index 00000000000..74bab891a4a
 +                            mXiaomiFingerprint.extCmd(0xa, nitValue);
 +                        } catch (Exception e) {
 +                        }
-+                    }, 100);
++                    }, 60);
 +                }
 +            } catch (Exception e) {
 +                Slog.d("PHH-Enroll", "Failed calling xiaomi fp extcmd");
