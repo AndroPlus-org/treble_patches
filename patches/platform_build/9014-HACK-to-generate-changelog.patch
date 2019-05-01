@@ -1,27 +1,26 @@
-From 14bfdd2d26585547de4268098a8eb0a7f732e07a Mon Sep 17 00:00:00 2001
+From f2fa999e6e411429522007e200b11594ea061241 Mon Sep 17 00:00:00 2001
 From: AndroPlus <mail@andro.plus>
-Date: Sat, 30 Mar 2019 16:32:59 +0900
+Date: Wed, 1 May 2019 11:46:43 +0900
 Subject: [PATCH 1/1] HACK to generate changelog
 
 Signed-off-by: AndroPlus <mail@andro.plus>
 ---
- core/Makefile | 4 ++++
- 1 file changed, 4 insertions(+)
+ core/Makefile | 2 ++
+ 1 file changed, 2 insertions(+)
 
 diff --git a/core/Makefile b/core/Makefile
-index 7fcaaf17d..13ae1f55f 100644
+index b8149d199..0d426f833 100644
 --- a/core/Makefile
 +++ b/core/Makefile
-@@ -861,6 +861,10 @@ INSTALLED_BOOTIMAGE_TARGET :=
- endif # BOARD_PREBUILT_BOOTIMAGE
- endif # TARGET_NO_KERNEL
+@@ -661,6 +661,8 @@ $(event_log_tags_file): PRIVATE_MERGED_FILE := $(all_event_log_tags_file)
+ $(event_log_tags_file): $(event_log_tags_src) $(all_event_log_tags_file) $(pdk_fusion_log_tags_file) $(MERGETAGS) build/make/tools/event_log_tags.py
+ 	$(hide) mkdir -p $(dir $@)
+ 	$(hide) $(MERGETAGS) -o $@ -m $(PRIVATE_MERGED_FILE) $(PRIVATE_SRC_FILES)
++	$(hide) ./vendor/lineage/build/tools/changelog.sh
++	$(hide) mv $(PRODUCT_OUT)/Changelog.txt $(PRODUCT_OUT)/changelog_$(TARGET_DEVICE).txt
  
-+$(hide) ./vendor/lineage/build/tools/changelog.sh
-+$(hide) mv $(PRODUCT_OUT)/Changelog.txt $(PRODUCT_OUT)/changelog_$(TARGET_DEVICE).txt
-+
- # -----------------------------------------------------------------
- # NOTICE files
- #
+ event-log-tags: $(event_log_tags_file)
+ 
 -- 
 2.17.1
 
